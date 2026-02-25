@@ -278,32 +278,417 @@
 		},
 		{
 			"name": "SEO Analysis",
-			"item": [],
+			"item": [
+				{
+					"name": "Get Keyword Suggestions",
+					"id": "8b4daa53-5689-4eba-866f-288509aacc0c",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/seo/keywords?marketplace={{marketplace}}&product_title={{product_title}}&category={{category}}&limit=20",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"seo",
+								"keywords"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								},
+								{
+									"key": "product_title",
+									"value": "{{product_title}}"
+								},
+								{
+									"key": "category",
+									"value": "{{category}}"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						},
+						"description": "Retrieve high-performing SEO keywords for a product title and category on a given marketplace. Returns keyword suggestions ranked by search volume and competition score."
+					},
+					"response": []
+				},
+				{
+					"name": "Analyze Listing SEO",
+					"id": "aae177d1-8ee2-46f5-997b-977a3aea76cd",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"marketplace\": \"{{marketplace}}\",\n  \"title\": \"{{product_title}}\",\n  \"description\": \"{{product_description}}\",\n  \"category\": \"{{category}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/seo/analyze-listing",
+						"description": "Analyze the SEO quality of an existing product listing. Returns a score, keyword density, title optimization tips, and description improvement suggestions."
+					},
+					"response": []
+				},
+				{
+					"name": "Optimize Product Title",
+					"id": "3b9ed3eb-dc54-4aac-a97c-950ebf5bae0b",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"original_title\": \"{{original_title}}\",\n  \"marketplace\": \"{{marketplace}}\",\n  \"category\": \"{{category}}\",\n  \"target_keywords\": [\"{{keyword_1}}\", \"{{keyword_2}}\"],\n  \"max_length\": 60\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/seo/optimize-title",
+						"description": "Use the AI agent to generate an optimized product title for a given marketplace. Returns multiple title variants ranked by predicted SEO performance."
+					},
+					"response": []
+				},
+				{
+					"name": "Check Keyword Ranking",
+					"id": "272d93dd-bf07-4d47-91b2-1fa10ba436fa",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/seo/ranking?product_id={{product_id}}&marketplace={{marketplace}}&keyword={{keyword}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"seo",
+								"ranking"
+							],
+							"query": [
+								{
+									"key": "product_id",
+									"value": "{{product_id}}"
+								},
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								},
+								{
+									"key": "keyword",
+									"value": "{{keyword}}"
+								}
+							]
+						},
+						"description": "Check the current organic search ranking position of a product for a specific keyword on a marketplace. Returns position, page, and historical ranking trend."
+					},
+					"response": []
+				},
+				{
+					"name": "Competitor Keyword Analysis",
+					"id": "559341f7-1111-4cb3-8acc-6ece77b8d2bb",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"competitor_product_ids\": [\"{{competitor_id_1}}\", \"{{competitor_id_2}}\"],\n  \"marketplace\": \"{{marketplace}}\",\n  \"category\": \"{{category}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/seo/competitor-keywords",
+						"description": "Extract and analyze the keywords used by top-ranking competitor listings. Returns a keyword gap analysis to identify opportunities your listings are missing."
+					},
+					"response": []
+				}
+			],
 			"id": "02d5581b-a457-42ca-abca-e958fbb7e802"
 		},
 		{
 			"name": "Ads Analysis",
-			"item": [],
+			"item": [
+				{
+					"name": "List Ad Campaigns",
+					"id": "4ca53206-567a-4d81-b03f-d53c3a71d70f",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/ads/campaigns?marketplace={{marketplace}}&status={{status}}&limit={{limit}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"ads",
+								"campaigns"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								},
+								{
+									"key": "status",
+									"value": "{{status}}"
+								},
+								{
+									"key": "limit",
+									"value": "{{limit}}"
+								}
+							]
+						},
+						"description": "List all active and paused ad campaigns for a given marketplace. Returns campaign ID, name, budget, spend, impressions, clicks, and ROAS."
+					},
+					"response": []
+				}
+			],
 			"id": "7ecda8fd-f082-43b1-82a1-a3b077e703d3"
 		},
 		{
 			"name": "PDF & Document Reading",
-			"item": [],
+			"item": [
+				{
+					"name": "Upload Document",
+					"id": "f1c43d6b-a21f-4db7-8010-fcd01424d9f0",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"type": "file",
+									"key": "file",
+									"src": "{{file_path}}"
+								},
+								{
+									"type": "text",
+									"key": "document_type",
+									"value": "{{document_type}}"
+								},
+								{
+									"type": "text",
+									"key": "extract_tables",
+									"value": "true"
+								}
+							]
+						},
+						"url": "http://{{base_url}}/api/documents/upload",
+						"description": "Upload a PDF or document file for AI-powered content extraction. Supports invoices, product catalogs, competitor reports, and market research PDFs."
+					},
+					"response": []
+				}
+			],
 			"id": "75329674-7c6b-4473-8374-d34fb2d9ebe3"
 		},
 		{
 			"name": "Report Generation",
-			"item": [],
+			"item": [
+				{
+					"name": "Generate Market Report",
+					"id": "ea3875cd-9e73-4519-8106-90dee6272829",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"report_type\": \"market_overview\",\n  \"marketplace\": \"{{marketplace}}\",\n  \"category\": \"{{category}}\",\n  \"period\": \"{{period}}\",\n  \"format\": \"pdf\",\n  \"include_charts\": true,\n  \"include_competitor_analysis\": true,\n  \"include_seo_insights\": true,\n  \"include_ads_performance\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/reports/generate",
+						"description": "Generate a comprehensive market intelligence report combining market research, SEO analysis, and ads performance data. Returns a downloadable PDF or JSON report."
+					},
+					"response": []
+				}
+			],
 			"id": "cdadaa45-989b-4fb9-a34d-2ef0af3e9a83"
 		},
 		{
 			"name": "Ad Creation",
-			"item": [],
+			"item": [
+				{
+					"name": "Create Ad Campaign",
+					"id": "41334b98-febb-4d95-aa30-727e68c2cd27",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"{{product_id}}\",\n  \"marketplace\": \"{{marketplace}}\",\n  \"campaign_name\": \"{{campaign_name}}\",\n  \"budget\": {{daily_budget}},\n  \"bid_strategy\": \"auto\",\n  \"target_keywords\": [\"{{keyword_1}}\", \"{{keyword_2}}\"],\n  \"start_date\": \"{{start_date}}\",\n  \"end_date\": \"{{end_date}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/ads/create",
+						"description": "Create a new sponsored product ad campaign on a marketplace. The AI agent automatically suggests optimal keywords and bid values based on market data."
+					},
+					"response": []
+				}
+			],
 			"id": "2009a57f-a51b-4910-9d24-374451fc19f5"
 		},
 		{
 			"name": "Monitoring & Alerts",
-			"item": [],
+			"item": [
+				{
+					"name": "Create Monitoring Alert",
+					"id": "ace01407-dd28-49b9-b57b-8041da4315b1",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"alert_name\": \"{{alert_name}}\",\n  \"product_id\": \"{{product_id}}\",\n  \"marketplace\": \"{{marketplace}}\",\n  \"conditions\": [\n    {\n      \"type\": \"price_drop\",\n      \"threshold\": {{price_threshold}},\n      \"operator\": \"less_than\"\n    },\n    {\n      \"type\": \"ranking_change\",\n      \"threshold\": 5,\n      \"operator\": \"greater_than\"\n    }\n  ],\n  \"notification_channels\": [\"email\", \"webhook\"],\n  \"webhook_url\": \"{{webhook_url}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/monitoring/alerts",
+						"description": "Create a monitoring alert for a product. Triggers notifications when price drops, ranking changes, or competitor activity is detected on the marketplace."
+					},
+					"response": []
+				}
+			],
 			"id": "6009e583-3e3e-4aa1-8fc8-4ff7e0ca35a8"
 		}
 	]
