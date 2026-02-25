@@ -11,7 +11,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from api.src.connectors.base import BaseConnector, MarketplaceConfig
+from api.src.connectors.base import BaseConnector
 from api.src.types.listing import (
     ListingNormalized, 
     Marketplace, 
@@ -35,13 +35,17 @@ class MercadoLivreConnector(BaseConnector):
     def __init__(self, access_token: Optional[str] = None):
         # Pegar token das variáveis de ambiente ou parâmetro
         token = access_token or os.getenv("ML_ACCESS_TOKEN")
-        config = MarketplaceConfig.get_config("mercado_livre")
-        
-        super().__init__(api_key=token, config=config)
+        config = {
+            "max_title_length": 60,
+            "forbidden_terms": ["grátis", "100%", "melhor do brasil"],
+        }
+
+        super().__init__(api_key=token)
         
         self.marketplace = Marketplace.MERCADO_LIVRE
         self.base_url = "https://api.mercadolibre.com"
         self.max_title_length = config.get("max_title_length", 60)
+        self.forbidden_terms = config.get("forbidden_terms", [])
         
     async def _get_headers(self) -> Dict[str, str]:
         """Headers para requisições na API do ML"""
@@ -363,3 +367,17 @@ class MercadoLivreConnector(BaseConnector):
         words = [w for w in words.split() if w not in stop_words and len(w) > 2]
         
         return list(set(words))
+
+    def validate_title(self, title: str) -> Dict[str, Any]:
+        """
+        Regras simples de título para ML.
+        """
+        base = super().validate_title(title, max_length=self.max_title_length)
+        lower = title.lower()
+        found = [term for term in self.forbidden_terms if term in lower]
+        if found:
+            base["is_valid"] = False
+            base["forbidden_terms_found"] = sorted(set(base["forbidden_terms_found"] + found))
+            if "forbidden_terms" not in base["errors"]:
+                base["errors"].append("forbidden_terms")
+        return base

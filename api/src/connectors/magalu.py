@@ -155,3 +155,11 @@ class MagaluConnector(BaseConnector):
             scraped_at=datetime.now(),
             original_data=raw_data
         )
+
+    def validate_title(self, title: str) -> Dict[str, Any]:
+        """Valida título conforme regras do Magalu"""
+        return {
+            "is_valid": len(title) <= 60,
+            "length": len(title),
+            "errors": ["Title too long"] if len(title) > 60 else []
+        }

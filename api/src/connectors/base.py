@@ -3,12 +3,6 @@ from typing import List, Dict, Any, Optional
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from typing import Any, Dict
-from abc import ABC
-
-# Alias for backward compatibility (required by mercado_livre.py)
-MarketplaceConfig = Dict[str, Any]
-
 class BaseConnector(ABC):
     """Classe base para conectores com retry logic e httpx"""
     
@@ -49,3 +43,19 @@ class BaseConnector(ABC):
     @abstractmethod
     async def normalize_listing(self, raw_data: Dict) -> Any:
         pass
+
+    def validate_title(self, title: str, max_length: int = 60) -> Dict[str, Any]:
+        """
+        Validação base de título (marketplaces podem sobrescrever).
+        """
+        forbidden_terms = ["gratis", "100%", "melhor do brasil"]
+        lower = title.lower()
+        found_forbidden = [term for term in forbidden_terms if term in lower]
+        is_valid = len(title) <= max_length and not found_forbidden
+        return {
+            "is_valid": is_valid,
+            "max_length": max_length,
+            "length": len(title),
+            "forbidden_terms_found": found_forbidden,
+            "errors": [] if is_valid else ["title_invalid"],
+        }

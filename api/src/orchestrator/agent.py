@@ -148,7 +148,7 @@ class MarketAgent:
         
         # DB Persistence (Optional Layer)
         try:
-            from api.src.db.database import save_research_run
+            from api.src.database import save_research_run
             save_research_run(summary, listings)
         except Exception as e:
             logger.warning(f"DB Persistence failed (execution continued): {e}")
@@ -183,3 +183,36 @@ class MarketAgent:
             
         # TODO: Save to DB (Operational Table)
         return {"total_skus": len(results), "data": results}
+
+    async def audit_my_listing(self, my_listing: ListingNormalized, keyword: str) -> Dict[str, Any]:
+        """
+        Audita um anúncio comparando com o mercado.
+        """
+        # 1. Coleta dados do mercado
+        market_data = await self.research_market(keyword=keyword, marketplace=my_listing.marketplace)
+        
+        # 2. Gera score (Stub - Implementar lógica real de scoring depois)
+        # TODO: Integrar com api.src.scoring
+        score = {
+            "seo": 85,
+            "price_competitiveness": "high" if my_listing.price < market_data.price_stats.avg else "low",
+            "market_avg_price": market_data.price_stats.avg
+        }
+        
+        return {
+            "listing_id": my_listing.listing_id,
+            "audit_score": score,
+            "market_summary": market_data
+        }
+
+    async def suggest_title(self, keyword: str, attributes: dict, marketplace: str) -> List[str]:
+        """
+        Sugere títulos baseados na keyword e atributos.
+        """
+        # Stub implementation
+        base = f"{keyword} {attributes.get('marca', '')} {attributes.get('modelo', '')}"
+        return [
+            f"{base} - Oferta Limitada",
+            f"{base} - Frete Grátis",
+            f"{base} - Original"
+        ]
