@@ -1,0 +1,24 @@
+﻿# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+api/.venv/
+api/venv/
+
+# Env / secrets
+.env
+.env.*
+api/.env
+
+# Logs / cache / data
+*.log
+cache/
+data/
+*.sqlite
+*.db
+
+# VS Code
+.vscode/
