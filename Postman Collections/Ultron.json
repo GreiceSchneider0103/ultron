@@ -2,6 +2,7 @@
 	"info": {
 		"_postman_id": "782cc47e-43db-4ccd-a1e8-8db2bc404218",
 		"name": "Ultron",
+		"description": "# Ultron — Market/SEO/Ads Intelligence Agent API\n\nUltron is an AI-powered agent designed for marketplace sellers operating on **Mercado Livre** and **Magalu**. It provides a unified API surface for market research, SEO optimization, ad campaign management, document intelligence, report generation, and real-time product monitoring.\n\n---\n\n## Getting Started\n\nAll requests require a Bearer token. Set the following collection variables before making any calls:\n\n| Variable | Description | Example |\n|---|---|---|\n| `base_url` | Base URL of your Ultron API instance | `https://api.ultron.io` |\n| `api_token` | Your API authentication token | `eyJhbGci...` |\n| `marketplace` | Target marketplace | `mercadolivre` or `magalu` |\n\n---\n\n## Collection Structure\n\n### 🔍 Market Research\nSearch products, retrieve competitor pricing, analyze category trends, and run the full AI-powered market research agent. Supports both Mercado Livre and Magalu marketplaces.\n\n### 📈 SEO Analysis\nGet keyword suggestions, analyze and score product listings, optimize product titles, check keyword rankings, and run competitor keyword analysis to improve organic visibility.\n\n### 📣 Ads Analysis\nList and monitor ad campaigns, retrieve granular performance metrics (impressions, clicks, CTR, ROAS), and get AI-powered optimization recommendations.\n\n### 📄 PDF & Document Reading\nUpload PDFs (catalogs, competitor reports, invoices) and use AI to extract structured data — pricing tables, product lists, and market statistics — from unstructured documents.\n\n### 📊 Report Generation\nGenerate comprehensive market intelligence reports combining research, SEO, and ads data. Reports can be exported as PDF or JSON and downloaded asynchronously.\n\n### 🚀 Ad Creation\nCreate individual or bulk ad campaigns with AI-assisted keyword targeting and bid optimization. Supports auto and manual bid strategies.\n\n### 🔔 Monitoring & Alerts\nSet up real-time alerts for price drops, ranking changes, and competitor activity. Review historical monitoring events to track product performance over time.\n\n---\n\n## Authentication\n\nAll endpoints use **Bearer Token** authentication. Set `{{api_token}}` in your environment or collection variables.\n\n```\nAuthorization: Bearer {{api_token}}\n```\n\n---\n\n## Common Variables\n\n- `{{product_id}}` — Marketplace product identifier\n- `{{campaign_id}}` — Ad campaign identifier\n- `{{document_id}}` — Uploaded document identifier\n- `{{report_id}}` — Generated report identifier\n- `{{category}}` — Product category slug\n- `{{start_date}}` / `{{end_date}}` — Date range in `YYYY-MM-DD` format\n- `{{period}}` — Time period (e.g., `7d`, `30d`, `90d`)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
 	},
 	"item": [
@@ -528,6 +529,132 @@
 						"description": "List all active and paused ad campaigns for a given marketplace. Returns campaign ID, name, budget, spend, impressions, clicks, and ROAS."
 					},
 					"response": []
+				},
+				{
+					"name": "Get Campaign Performance",
+					"id": "fd3c1fa9-7faa-4c31-a1f9-e366728f6ad8",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/ads/campaigns/{{campaign_id}}/performance?start_date={{start_date}}&end_date={{end_date}}&granularity=daily",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"ads",
+								"campaigns",
+								"{{campaign_id}}",
+								"performance"
+							],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "{{start_date}}"
+								},
+								{
+									"key": "end_date",
+									"value": "{{end_date}}"
+								},
+								{
+									"key": "granularity",
+									"value": "daily"
+								}
+							]
+						},
+						"description": "Retrieve detailed performance metrics for a specific ad campaign including impressions, clicks, CTR, spend, conversions, and ROAS over a date range."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Ad Campaign",
+					"id": "dd86a648-8f8a-416e-826f-180eea049a07",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"{{status}}\",\n  \"daily_budget\": {{daily_budget}},\n  \"bid_strategy\": \"{{bid_strategy}}\",\n  \"target_keywords\": [\"{{keyword_1}}\", \"{{keyword_2}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/ads/campaigns/{{campaign_id}}",
+						"description": "Update an existing ad campaign's budget, status (active/paused), bid strategy, or target keywords. Use this to optimize campaigns based on performance data."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Ad Recommendations",
+					"id": "785c39c2-8725-4b48-bc1c-ea61efbbddc0",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/ads/recommendations?marketplace={{marketplace}}&product_id={{product_id}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"ads",
+								"recommendations"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								},
+								{
+									"key": "product_id",
+									"value": "{{product_id}}"
+								}
+							]
+						},
+						"description": "Get AI-powered ad optimization recommendations for a product, including suggested bid adjustments, keyword additions/removals, and budget reallocation strategies."
+					},
+					"response": []
 				}
 			],
 			"id": "7ecda8fd-f082-43b1-82a1-a3b077e703d3"
@@ -573,6 +700,79 @@
 						"description": "Upload a PDF or document file for AI-powered content extraction. Supports invoices, product catalogs, competitor reports, and market research PDFs."
 					},
 					"response": []
+				},
+				{
+					"name": "Extract Document Data",
+					"id": "f4c425c0-7dbc-4f70-be36-98c927ea2eb0",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/documents/{{document_id}}/extract?extract_type={{extract_type}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"documents",
+								"{{document_id}}",
+								"extract"
+							],
+							"query": [
+								{
+									"key": "extract_type",
+									"value": "{{extract_type}}"
+								}
+							]
+						},
+						"description": "Extract structured data from a previously uploaded document. Supports extracting product listings, pricing tables, competitor data, and market statistics from PDFs."
+					},
+					"response": []
+				},
+				{
+					"name": "Analyze Document with AI",
+					"id": "6c362ab3-3417-4c25-bb43-e7cb9d8c1ded",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"document_id\": \"{{document_id}}\",\n  \"analysis_type\": \"competitor_report\",\n  \"extract_pricing\": true,\n  \"extract_products\": true,\n  \"extract_market_share\": true,\n  \"language\": \"pt-BR\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/documents/analyze",
+						"description": "Run AI analysis on an uploaded document to extract competitive intelligence, pricing data, and market insights. Supports Portuguese and English documents."
+					},
+					"response": []
 				}
 			],
 			"id": "75329674-7c6b-4473-8374-d34fb2d9ebe3"
@@ -609,6 +809,48 @@
 						},
 						"url": "http://{{base_url}}/api/reports/generate",
 						"description": "Generate a comprehensive market intelligence report combining market research, SEO analysis, and ads performance data. Returns a downloadable PDF or JSON report."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Report Status",
+					"id": "830b2e41-9d32-46c4-84bf-1fe88686100b",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": "http://{{base_url}}/api/reports/{{report_id}}/status",
+						"description": "Check the generation status of a previously requested report. Returns status (pending/processing/completed/failed) and a download URL when ready."
+					},
+					"response": []
+				},
+				{
+					"name": "Download Report",
+					"id": "237294cf-3d56-4b02-b620-ecf30bffee5c",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							}
+						],
+						"url": "http://{{base_url}}/api/reports/{{report_id}}/download",
+						"description": "Download a completed market report in the requested format (PDF or JSON). The report includes market overview, competitor analysis, SEO insights, and ads performance data."
 					},
 					"response": []
 				}
@@ -649,6 +891,38 @@
 						"description": "Create a new sponsored product ad campaign on a marketplace. The AI agent automatically suggests optimal keywords and bid values based on market data."
 					},
 					"response": []
+				},
+				{
+					"name": "Bulk Create Ad Campaigns",
+					"id": "1018822b-fba0-44ce-89fb-ed9fd4b9d8f8",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"marketplace\": \"{{marketplace}}\",\n  \"campaigns\": [\n    {\n      \"product_id\": \"{{product_id_1}}\",\n      \"campaign_name\": \"{{campaign_name_1}}\",\n      \"budget\": {{daily_budget_1}},\n      \"bid_strategy\": \"auto\"\n    },\n    {\n      \"product_id\": \"{{product_id_2}}\",\n      \"campaign_name\": \"{{campaign_name_2}}\",\n      \"budget\": {{daily_budget_2}},\n      \"bid_strategy\": \"manual\"\n    }\n  ],\n  \"auto_optimize\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/ads/bulk-create",
+						"description": "Create multiple ad campaigns in a single request. The AI agent can auto-optimize bids and keywords for each product based on market research data."
+					},
+					"response": []
 				}
 			],
 			"id": "2009a57f-a51b-4910-9d24-374451fc19f5"
@@ -685,6 +959,110 @@
 						},
 						"url": "http://{{base_url}}/api/monitoring/alerts",
 						"description": "Create a monitoring alert for a product. Triggers notifications when price drops, ranking changes, or competitor activity is detected on the marketplace."
+					},
+					"response": []
+				},
+				{
+					"name": "List Monitoring Alerts",
+					"id": "ea4190b1-ef3d-479d-aefe-ac412a71ba5c",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/monitoring/alerts?marketplace={{marketplace}}&status={{status}}&product_id={{product_id}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"monitoring",
+								"alerts"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								},
+								{
+									"key": "status",
+									"value": "{{status}}"
+								},
+								{
+									"key": "product_id",
+									"value": "{{product_id}}"
+								}
+							]
+						},
+						"description": "List all configured monitoring alerts for products. Filter by marketplace, alert status (active/triggered/paused), or specific product ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Monitoring Event History",
+					"id": "f8388c81-e2ad-40ac-a328-3d829aa2bfaa",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/monitoring/events?product_id={{product_id}}&marketplace={{marketplace}}&event_type={{event_type}}&start_date={{start_date}}&end_date={{end_date}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"monitoring",
+								"events"
+							],
+							"query": [
+								{
+									"key": "product_id",
+									"value": "{{product_id}}"
+								},
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								},
+								{
+									"key": "event_type",
+									"value": "{{event_type}}"
+								},
+								{
+									"key": "start_date",
+									"value": "{{start_date}}"
+								},
+								{
+									"key": "end_date",
+									"value": "{{end_date}}"
+								}
+							]
+						},
+						"description": "Retrieve a history of monitoring events for a product, including price changes, ranking shifts, competitor activity, and stock availability changes."
 					},
 					"response": []
 				}
