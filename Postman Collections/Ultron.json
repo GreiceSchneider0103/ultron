@@ -4,5 +4,307 @@
 		"name": "Ultron",
 		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json"
 	},
-	"item": []
+	"item": [
+		{
+			"name": "Market Research",
+			"item": [
+				{
+					"name": "Search Products - Mercado Livre",
+					"id": "92b70766-fd09-43df-98ee-f0fcca60b3bd",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/market-research/search?marketplace=mercadolivre&query={{search_query}}&category={{category}}&limit={{limit}}&offset={{offset}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"market-research",
+								"search"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "mercadolivre"
+								},
+								{
+									"key": "query",
+									"value": "{{search_query}}"
+								},
+								{
+									"key": "category",
+									"value": "{{category}}"
+								},
+								{
+									"key": "limit",
+									"value": "{{limit}}"
+								},
+								{
+									"key": "offset",
+									"value": "{{offset}}"
+								}
+							]
+						},
+						"description": "Search for products on Mercado Livre marketplace. Returns a list of products matching the query with pricing, seller info, and ranking data."
+					},
+					"response": []
+				},
+				{
+					"name": "Search Products - Magalu",
+					"id": "5c0ac4de-0259-4d6e-bdae-8221155cac32",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/market-research/search?marketplace=magalu&query={{search_query}}&category={{category}}&limit={{limit}}&offset={{offset}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"market-research",
+								"search"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "magalu"
+								},
+								{
+									"key": "query",
+									"value": "{{search_query}}"
+								},
+								{
+									"key": "category",
+									"value": "{{category}}"
+								},
+								{
+									"key": "limit",
+									"value": "{{limit}}"
+								},
+								{
+									"key": "offset",
+									"value": "{{offset}}"
+								}
+							]
+						},
+						"description": "Search for products on Magazine Luiza (Magalu) marketplace. Returns a list of products matching the query with pricing, seller info, and ranking data."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Product Details",
+					"id": "f63b258e-db9a-4c3d-9124-bf9cbaef16d0",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/market-research/product/{{product_id}}?marketplace={{marketplace}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"market-research",
+								"product",
+								"{{product_id}}"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								}
+							]
+						},
+						"description": "Retrieve detailed information about a specific product including price history, reviews, seller reputation, and stock availability."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Competitor Pricing",
+					"id": "06c0c0e5-f813-4d4d-a651-968d1e3f8dac",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_ids\": [\"{{product_id_1}}\", \"{{product_id_2}}\"],\n  \"marketplace\": \"{{marketplace}}\",\n  \"include_shipping\": true,\n  \"include_promotions\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/market-research/competitor-pricing",
+						"description": "Analyze competitor pricing for a set of products across marketplaces. Returns min, max, and average prices along with seller details."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Category Trends",
+					"id": "c30347d4-cff9-4a2f-82d9-4987890d7e28",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "http://{{base_url}}/api/market-research/trends?marketplace={{marketplace}}&category={{category}}&period={{period}}",
+							"protocol": "http",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"market-research",
+								"trends"
+							],
+							"query": [
+								{
+									"key": "marketplace",
+									"value": "{{marketplace}}"
+								},
+								{
+									"key": "category",
+									"value": "{{category}}"
+								},
+								{
+									"key": "period",
+									"value": "{{period}}"
+								}
+							]
+						},
+						"description": "Retrieve trending products and categories for a given marketplace and time period. Useful for identifying market opportunities."
+					},
+					"response": []
+				},
+				{
+					"name": "Run Market Research Agent",
+					"id": "59db842a-37f6-4cd7-b967-d40c7b236c9d",
+					"protocolProfileBehavior": {
+						"disableBodyPruning": true
+					},
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{api_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"{{research_query}}\",\n  \"marketplaces\": [\"mercadolivre\", \"magalu\"],\n  \"categories\": [\"{{category}}\"],\n  \"depth\": \"full\",\n  \"include_competitors\": true,\n  \"include_pricing\": true,\n  \"include_trends\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://{{base_url}}/api/market-research/analyze",
+						"description": "Trigger the AI-powered market research agent to perform a comprehensive analysis across marketplaces. Returns insights on competition, pricing, and market positioning."
+					},
+					"response": []
+				}
+			],
+			"id": "dfcc94fe-a3e5-440b-a3d6-8237604efcef"
+		},
+		{
+			"name": "SEO Analysis",
+			"item": [],
+			"id": "02d5581b-a457-42ca-abca-e958fbb7e802"
+		},
+		{
+			"name": "Ads Analysis",
+			"item": [],
+			"id": "7ecda8fd-f082-43b1-82a1-a3b077e703d3"
+		},
+		{
+			"name": "PDF & Document Reading",
+			"item": [],
+			"id": "75329674-7c6b-4473-8374-d34fb2d9ebe3"
+		},
+		{
+			"name": "Report Generation",
+			"item": [],
+			"id": "cdadaa45-989b-4fb9-a34d-2ef0af3e9a83"
+		},
+		{
+			"name": "Ad Creation",
+			"item": [],
+			"id": "2009a57f-a51b-4910-9d24-374451fc19f5"
+		},
+		{
+			"name": "Monitoring & Alerts",
+			"item": [],
+			"id": "6009e583-3e3e-4aa1-8fc8-4ff7e0ca35a8"
+		}
+	]
 }
