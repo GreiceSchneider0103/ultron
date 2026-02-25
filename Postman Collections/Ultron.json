@@ -1418,6 +1418,202 @@
 				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/mercado_livre.py\""
 			},
 			"response": []
+		},
+		{
+			"name": "api/src/analytics.py",
+			"id": "543409f0-d769-4761-a158-3042eb47d280",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/analytics.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/analytics.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/database.py",
+			"id": "a63138c4-48b5-4e45-83b3-c077e29d2d3b",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/database.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/database.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/db/base.py",
+			"id": "5ba98b36-9f9a-4a9b-a1fa-be4e9ecede95",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/base.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/base.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/db/mercado_livre.py",
+			"id": "b96a89e6-f3eb-41c2-abf1-fdc085247aaa",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/mercado_livre.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/mercado_livre.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/db/repository.py",
+			"id": "934e435b-55b0-4d83-ab40-c86756b52ba4",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/repository.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/repository.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/db/schema.sql",
+			"id": "426049ae-fe2a-4ccf-ac64-4f1301a161f3",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/schema.sql",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/db/schema.sql\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/functions/generator.py",
+			"id": "419ffab4-a547-43ae-9faa-bac32360f2c9",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/functions/generator.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/functions/generator.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/magalu.py",
+			"id": "6ebe5dfc-ea74-4a8d-adb5-540bc5d2ca8a",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/magalu.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/magalu.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/models.py",
+			"id": "e972c3b4-4545-4249-a109-e93259cde62f",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/models.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/models.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/orchestrator/agent.py",
+			"id": "c377c294-8b26-4723-bc72-a4dbc11d35ea",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/agent.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/agent.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/orchestrator/database.py",
+			"id": "b5d0ce35-0b4d-42df-b8d2-6fa865d093eb",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/database.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/database.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/orchestrator/magalu.py",
+			"id": "67e36bb0-d99f-4318-a099-6c9ae5274474",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/magalu.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/magalu.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/orchestrator/models.py",
+			"id": "56a3fc85-7c67-4f3f-a7f7-4fae4f7d2147",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/models.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/orchestrator/models.py\""
+			},
+			"response": []
+		},
+		{
+			"name": "api/src/repository.py",
+			"id": "c9a0b938-e56d-4545-9d08-f3a373ef8273",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/repository.py",
+				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/repository.py\""
+			},
+			"response": []
 		}
 	]
 }
