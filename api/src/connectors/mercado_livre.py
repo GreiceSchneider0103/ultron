@@ -1,383 +1,307 @@
 """
-Conector do Mercado Livre
-Implementação da interface BaseConnector
+Connector Mercado Livre — usa a API oficial (MeLi API v1).
+
+Autenticação:
+  1. Redireciona o usuário para ML_REDIRECT_URI (OAuth2)
+  2. ML retorna um ?code=
+  3. Troca o code por access_token via /oauth/token
+  4. Guarde o token em ML_SELLER_ACCESS_TOKEN
+
+Documentação: https://developers.mercadolivre.com.br/pt_br/api-docs-pt-br
 """
-
-import os
-import json
-import httpx
-import time
-import logging
-from typing import List, Optional, Dict, Any
+from __future__ import annotations
+import asyncio
 from datetime import datetime
+from typing import Any, Optional
+import httpx
+import structlog
 
+from api.src.config import get_settings
 from api.src.connectors.base import BaseConnector
 from api.src.types.listing import (
-    ListingNormalized, 
-    Marketplace, 
-    ReputationLevel,
-    ListingAttributes,
-    MediaItem,
-    Seller,
-    SellerMetrics,
-    SocialProof,
-    Badges,
-    TextBlocks
+    Badges, ListingAttributes, ListingNormalized, Marketplace,
+    MediaItem, MediaType, Seller, SellerMetrics, SellerReputation,
+    SocialProof, TextBlocks,
 )
 
+log = structlog.get_logger()
+settings = get_settings()
 
-logger = logging.getLogger(__name__)
+_REPUTATION_MAP = {
+    "5_green": SellerReputation.PLATINUM,
+    "4_light_green": SellerReputation.GOLD,
+    "3_yellow": SellerReputation.SILVER,
+    "2_orange": SellerReputation.BRONZE,
+    "1_red": SellerReputation.NEW,
+}
 
 
 class MercadoLivreConnector(BaseConnector):
-    """Conector para API do Mercado Livre"""
-    
-    def __init__(self, access_token: Optional[str] = None):
-        # Pegar token das variáveis de ambiente ou parâmetro
-        token = access_token or os.getenv("ML_ACCESS_TOKEN")
-        config = {
-            "max_title_length": 60,
-            "forbidden_terms": ["grátis", "100%", "melhor do brasil"],
-        }
+    marketplace_name = "mercado_livre"
+    rate_limit_delay = 0.3   # ML permite ~90 req/min
 
-        super().__init__(api_key=token)
-        
-        self.marketplace = Marketplace.MERCADO_LIVRE
-        self.base_url = "https://api.mercadolibre.com"
-        self.max_title_length = config.get("max_title_length", 60)
-        self.forbidden_terms = config.get("forbidden_terms", [])
-        
-    async def _get_headers(self) -> Dict[str, str]:
-        """Headers para requisições na API do ML"""
-        headers = {
-            "Content-Type": "application/json"
-        }
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
-    
+    BASE = "https://api.mercadolibre.com"
+
+    def __init__(self, access_token: str = ""):
+        super().__init__(api_key=access_token)
+        self._token = access_token or settings.ml_seller_access_token
+
+    def _auth_headers(self) -> dict:
+        h = {}
+        if self._token:
+            h["Authorization"] = f"Bearer {self._token}"
+        return h
+
+    # ── Busca ─────────────────────────────────────────────────
+
     async def search(
         self,
         query: str,
-        category: Optional[str] = None,
+        category_id: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
-        price_min: Optional[float] = None,
-        price_max: Optional[float] = None,
-        condition: Optional[str] = None,
-        request_id: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """Buscar anúncios no Mercado Livre"""
-        
-        start_time = time.time()
-        # Construir query
-        search_url = f"{self.base_url}/sites/MLB/search"
-        
-        params = {
+    ) -> list[dict[str, Any]]:
+        """
+        GET /sites/MLB/search?q=...&limit=50
+        Retorna até 1000 resultados paginados (50 por vez).
+        """
+        params: dict[str, Any] = {
             "q": query,
-            "limit": min(limit, 50),  # ML limita a 50 por requisição
+            "limit": min(limit, 50),
             "offset": offset,
         }
-        
-        if category:
-            params["category"] = category
-            
-        if price_min is not None:
-            params["price_min"] = price_min
-            
-        if price_max is not None:
-            params["price_max"] = price_max
-            
-        if condition:
-            params["condition"] = condition
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
-                response = await client.get(
-                    search_url,
-                    params=params,
-                    headers=await self._get_headers()
-                )
-                response.raise_for_status()
-                
-                data = response.json()
-                results = data.get("results", [])
-                
-                # Structured logging
-                logger.info(json.dumps({
-                    "event": "connector_search",
-                    "marketplace": "mercado_livre",
-                    "query": query,
-                    "item_count": len(results),
-                    "duration_ms": round((time.time() - start_time) * 1000, 2),
-                    "request_id": request_id
-                }))
-                return results
-                
-            except httpx.HTTPError as e:
-                logger.error(f"Erro na busca do Mercado Livre: {e}")
-                return []
-    
-    async def get_details(self, listing_id: str) -> Dict[str, Any]:
-        """Buscar detalhes de um anúncio no ML"""
-        
-        url = f"{self.base_url}/items/{listing_id}"
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
-                response = await client.get(
-                    url,
-                    headers=await self._get_headers()
-                )
-                response.raise_for_status()
-                
-                item_data = response.json()
-                
-                # Buscar descrição separadamente
-                desc_url = f"{self.base_url}/items/{listing_id}/description"
-                try:
-                    desc_response = await client.get(desc_url, headers=await self._get_headers())
-                    
-                    if desc_response.status_code == 200:
-                        desc_data = desc_response.json()
-                        item_data["description"] = desc_data.get("plain_text", "")
-                except Exception as e:
-                    logger.warning(f"Não foi possível buscar descrição para {listing_id}: {e}")
-                
-                return item_data
-                
-            except httpx.HTTPError as e:
-                logger.error(f"Erro ao buscar detalhes do ML: {e}")
-                return {}
-    
-    async def get_seller(self, seller_id: str) -> Dict[str, Any]:
-        """Buscar perfil do vendedor no ML"""
-        
-        url = f"{self.base_url}/users/{seller_id}"
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
-                response = await client.get(
-                    url,
-                    headers=await self._get_headers()
-                )
-                response.raise_for_status()
-                return response.json()
-                
-            except httpx.HTTPError as e:
-                logger.error(f"Erro ao buscar vendedor do ML: {e}")
-                return {}
-    
-    async def normalize_listing(self, raw_data: Dict[str, Any]) -> ListingNormalized:
-        """Converter dados do ML para ListingNormalized"""
-        
-        # Extrair seller
-        seller_data = raw_data.get("seller", {})
-        seller_id = seller_data.get("id", raw_data.get("seller_id", ""))
-        
-        # Buscar dados do seller se não estiverem incluídos
-        if seller_id and not seller_data.get("metrics"):
-            try:
-                seller_full = await self.get_seller(seller_id)
-            except:
-                seller_full = {}
-        else:
-            seller_full = seller_data
-        
-        # Processar atributos
-        attributes = self._process_attributes(raw_data.get("attributes", []))
-        
-        # Processar imagens
-        pictures = raw_data.get("pictures", [])
-        if not pictures and "thumbnail" in raw_data:
-             # Fallback para thumbnail se não houver pictures (comum em resultados de busca)
-             pictures = [{"url": raw_data["thumbnail"]}]
+        if category_id:
+            params["category"] = category_id
 
-        media = [
-            MediaItem(
-                url=picture.get("url", ""),
-                tipo="foto",
-                is_capa=(i == 0)
-            )
-            for i, picture in enumerate(pictures[:10])  # Limitar a 10 imagens
-        ]
-        
-        # Processar seller
-        tags = seller_full.get("tags", [])
-        is_official = "eshop" in tags or "brand" in tags
+        data = await self._get(
+            f"{self.BASE}/sites/MLB/search",
+            params=params,
+            headers=self._auth_headers(),
+        )
+        return data.get("results", [])
 
-        seller = Seller(
-            seller_id=str(seller_id),
-            nome=seller_full.get("nickname", raw_data.get("seller_contact", {}).get("email", "Desconhecido")),
-            reputacao=self._map_reputation(seller_full.get("seller_reputation", {}).get("level_id", "new")),
-            tempo_mercado_meses=self._calculate_months_since(seller_full.get("registration_date")),
-            metricas=SellerMetrics(
-                vendas_12m=seller_full.get("seller_reputation", {}).get("metrics", {}).get("sales", {}).get("completed", {}).get("value"),
-                reputacao=1.0 if seller_full.get("seller_reputation", {}).get("power_seller_status") == "active" else 0.0,
-            ) if seller_full else None,
-            tiene_tienda_oficial=is_official,
+    async def get_listing_details(self, listing_id: str) -> dict[str, Any]:
+        """GET /items/{id} + /items/{id}/descriptions"""
+        item, desc = await asyncio.gather(
+            self._get(f"{self.BASE}/items/{listing_id}", headers=self._auth_headers()),
+            self._get(f"{self.BASE}/items/{listing_id}/descriptions", headers=self._auth_headers()),
         )
-        
-        # Processar prova social
-        social = raw_data.get("sold_quantity", 0)
-        reviews = raw_data.get("reviews", {})
-        review_total = 0
-        review_rating = 0.0
-        
-        if isinstance(reviews, dict):
-            review_total = reviews.get("total", 0)
-            review_rating = reviews.get("rating_average", 0.0)
+        item["_descriptions"] = desc if isinstance(desc, list) else []
+        return item
 
-        social_proof = SocialProof(
-            avaliacoes=review_total,
-            nota_media=review_rating,
-        )
-        
-        # Processar badges
-        shipping = raw_data.get("shipping", {})
-        badges = Badges(
-            frete_gratis=shipping.get("free_shipping", False),
-            full=shipping.get("logistic_type") == "fulfillment",
-            premium=raw_data.get("listing_type_id") == "gold_pro",
-            oficial=raw_data.get("official_store_id") is not None,
-            novo=raw_data.get("condition") == "new",
-        )
-        
-        # Processar texto
-        sale_terms = raw_data.get("sale_terms", [])
-        bullets = []
-        if isinstance(sale_terms, list):
-            for term in sale_terms:
-                if isinstance(term, dict) and term.get("name") and term.get("value_name"):
-                    bullets.append(f"{term['name']}: {term['value_name']}")
+    async def get_seller_details(self, seller_id: str) -> dict[str, Any]:
+        """GET /users/{seller_id}"""
+        return await self._get(f"{self.BASE}/users/{seller_id}", headers=self._auth_headers())
 
-        description = raw_data.get("description", "")
-        text_blocks = TextBlocks(
-            bullets=bullets,
-            descricao=description if isinstance(description, str) else description.get("plain_text", ""),
-        )
-        
-        # Extrair termos de SEO do título
-        seo_terms = self._extract_seo_terms(raw_data.get("title", ""))
-        
-        # Calcular preço final
-        price = raw_data.get("price", 0.0)
-        shipping_cost = shipping.get("cost", 0.0) or 0.0
-        
-        # Category path
-        category_id = raw_data.get("category_id", "")
-        category_path = [category_id] if category_id else []
-        
+    # ── Normalização ──────────────────────────────────────────
+
+    async def normalize(self, raw: dict[str, Any]) -> ListingNormalized:
+        listing_id = raw.get("id", "")
+        price = float(raw.get("price") or 0)
+        original_price = float(raw.get("original_price") or 0) or None
+        shipping = self._extract_shipping(raw)
+
+        seller_raw = raw.get("seller", {})
+        seller = await self._build_seller(seller_raw)
+
+        attributes = self._extract_attributes(raw.get("attributes", []))
+        badges = self._extract_badges(raw)
+        media = self._extract_media(raw.get("pictures", []))
+        text_blocks = self._extract_text_blocks(raw)
+        seo_terms = self._extract_seo_terms(raw)
+        social_proof = self._extract_social_proof(raw)
+        category_path = self._extract_category(raw)
+
         return ListingNormalized(
             marketplace=Marketplace.MERCADO_LIVRE,
-            listing_id=raw_data.get("id", ""),
-            url=raw_data.get("permalink", ""),
-            title=raw_data.get("title", ""),
+            listing_id=listing_id,
+            url=raw.get("permalink", f"https://www.mercadolivre.com.br/p/{listing_id}"),
             price=price,
-            currency=raw_data.get("currency_id", "BRL"),
-            shipping_cost=shipping_cost,
-            final_price_estimate=price + shipping_cost,
+            price_original=original_price,
+            shipping_cost=shipping,
+            final_price_estimate=price + shipping,
+            installments_max=self._installments_max(raw),
+            installments_value=self._installments_value(raw),
             category_path=category_path,
-            category_id=category_id,
+            category_id=raw.get("category_id"),
+            title=raw.get("title", ""),
             attributes=attributes,
+            text_blocks=text_blocks,
             media=media,
+            media_count=len(media),
             seller=seller,
             social_proof=social_proof,
             badges=badges,
-            text_blocks=text_blocks,
             seo_terms=seo_terms,
-            original_data=raw_data
+            scraped_at=datetime.utcnow(),
         )
-    
-    def _process_attributes(self, attributes: List[Dict]) -> ListingAttributes:
-        """Processar atributos do produto"""
-        
-        attr_dict = {attr.get("id", ""): attr.get("value_name", "") 
-                     for attr in attributes}
-        
-        # Mapear para campos específicos de móveis
-        return ListingAttributes(
-            cor=attr_dict.get("COLOR", None),
-            material=attr_dict.get("MATERIAL", None),
-            tecido=attr_dict.get("FABRIC_DESIGN", None),
-            largura=self._extract_number(attr_dict.get("WIDTH")),
-            profundidade=self._extract_number(attr_dict.get("DEPTH")),
-            altura=self._extract_number(attr_dict.get("HEIGHT")),
-            peso=self._extract_number(attr_dict.get("WEIGHT")),
-            tipo_sofa=attr_dict.get("SOFA_TYPE"),
-            numero_lugares=self._extract_number(attr_dict.get("SEATING_CAPACITY")),
-            formato=attr_dict.get("SOFA_FORMAT"),
-            capacidade=self._extract_number(attr_dict.get("MAX_LOAD_CAPACITY")),
-        )
-    
-    def _extract_number(self, value: Any) -> Optional[float]:
-        """Extrair número de uma string"""
-        if value is None:
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        try:
-            # Tentar extrair número de string
-            import re
-            numbers = re.findall(r"[\d.]+", str(value))
-            if numbers:
-                return float(numbers[0])
-        except:
-            pass
-        return None
-    
-    def _map_reputation(self, level_id: str) -> ReputationLevel:
-        """Mapear nível de reputação do ML para nosso enum"""
-        level_id = str(level_id).upper()
-        
-        if level_id in ["5_black", "4_platinum", "3_gold"]:
-            return ReputationLevel.GOLD
-        elif level_id == "2_silver":
-            return ReputationLevel.SILVER
-        elif level_id == "1_bronze":
-            return ReputationLevel.BRONZE
-        else:
-            return ReputationLevel.NEW
-    
-    def _calculate_months_since(self, registration_date: Optional[str]) -> Optional[int]:
-        """Calcular meses desde o registro"""
-        if not registration_date:
-            return None
-        
-        try:
-            reg_date = datetime.fromisoformat(registration_date.replace("Z", "+00:00"))
-            now = datetime.now()
-            months = (now.year - reg_date.year) * 12 + (now.month - reg_date.month)
-            return max(0, months)
-        except:
-            return None
-    
-    def _extract_seo_terms(self, title: str) -> List[str]:
-        """Extrair termos de SEO do título"""
-        # Palavras comuns a ignorar
-        stop_words = {
-            "de", "do", "da", "dos", "das", "em", "para", "com", "sem",
-            "o", "a", "os", "as", "um", "uma", "por", "mais", "ao",
-            "e", "ou", "se", "na", "no", "nas", "nos"
-        }
-        
-        # Limpar e tokenizar
-        words = title.lower()
-        words = ''.join(c if c.isalnum() or c.isspace() else ' ' for c in words)
-        words = [w for w in words.split() if w not in stop_words and len(w) > 2]
-        
-        return list(set(words))
 
-    def validate_title(self, title: str) -> Dict[str, Any]:
-        """
-        Regras simples de título para ML.
-        """
-        base = super().validate_title(title, max_length=self.max_title_length)
-        lower = title.lower()
-        found = [term for term in self.forbidden_terms if term in lower]
-        if found:
-            base["is_valid"] = False
-            base["forbidden_terms_found"] = sorted(set(base["forbidden_terms_found"] + found))
-            if "forbidden_terms" not in base["errors"]:
-                base["errors"].append("forbidden_terms")
-        return base
+    # ── Helpers privados ──────────────────────────────────────
+
+    def _extract_shipping(self, raw: dict) -> float:
+        shipping = raw.get("shipping", {})
+        if shipping.get("free_shipping"):
+            return 0.0
+        # ML não retorna custo exato na listagem; usar 0 como proxy
+        return 0.0
+
+    async def _build_seller(self, seller_raw: dict) -> Seller:
+        seller_id = str(seller_raw.get("id", ""))
+        name = seller_raw.get("nickname", seller_id)
+        reputation_level = seller_raw.get("seller_reputation", {}).get("level_id", "")
+        reputation = _REPUTATION_MAP.get(reputation_level, SellerReputation.UNKNOWN)
+
+        # Tenta buscar detalhes se tiver ID
+        metrics = None
+        if seller_id and self._token:
+            try:
+                detail = await self.get_seller_details(seller_id)
+                rep = detail.get("seller_reputation", {})
+                trans = rep.get("transactions", {})
+                metrics = SellerMetrics(
+                    vendas_12m=trans.get("completed"),
+                    cancelamentos_pct=rep.get("metrics", {}).get("cancellations", {}).get("rate"),
+                    reclamacoes_pct=rep.get("metrics", {}).get("claims", {}).get("rate"),
+                    atraso_entrega_pct=rep.get("metrics", {}).get("delayed_handling_time", {}).get("rate"),
+                )
+            except Exception:
+                pass
+
+        return Seller(
+            seller_id=seller_id,
+            nome=name,
+            reputacao=reputation,
+            metricas=metrics,
+            is_official_store=bool(seller_raw.get("is_official_store", False)),
+        )
+
+    def _extract_attributes(self, attrs: list) -> ListingAttributes:
+        mapping = {
+            "COR": "cor",
+            "MATERIAL": "material",
+            "WIDTH": "largura_cm",
+            "DEPTH": "profundidade_cm",
+            "HEIGHT": "altura_cm",
+            "WEIGHT": "peso_kg",
+            "PRODUCT_TYPE": "tipo_produto",
+            "NUMBER_OF_SEATS": "numero_lugares",
+            "FILLING_MATERIAL": "densidade",
+        }
+        data: dict[str, Any] = {}
+        extras: dict[str, str] = {}
+        for attr in attrs:
+            key = attr.get("id", "")
+            val = attr.get("value_name")
+            if val is None:
+                continue
+            mapped = mapping.get(key)
+            if mapped:
+                # conversão de unidade quando necessário
+                if mapped in ("largura_cm", "profundidade_cm", "altura_cm"):
+                    data[mapped] = self._to_cm(val, attr.get("value_struct", {}))
+                elif mapped == "peso_kg":
+                    data[mapped] = self._to_kg(val, attr.get("value_struct", {}))
+                elif mapped == "numero_lugares":
+                    try:
+                        data[mapped] = int(val)
+                    except ValueError:
+                        pass
+                else:
+                    data[mapped] = val
+            else:
+                extras[key] = val
+        data["extras"] = extras
+        return ListingAttributes(**data)
+
+    @staticmethod
+    def _to_cm(value_name: str, struct: dict) -> Optional[float]:
+        try:
+            num = float(struct.get("number", value_name.split()[0]))
+            unit = struct.get("unit", "cm").lower()
+            if unit == "mm":
+                return num / 10
+            if unit == "m":
+                return num * 100
+            return num
+        except (ValueError, TypeError):
+            return None
+
+    @staticmethod
+    def _to_kg(value_name: str, struct: dict) -> Optional[float]:
+        try:
+            num = float(struct.get("number", value_name.split()[0]))
+            unit = struct.get("unit", "kg").lower()
+            if unit == "g":
+                return num / 1000
+            return num
+        except (ValueError, TypeError):
+            return None
+
+    def _extract_badges(self, raw: dict) -> Badges:
+        shipping = raw.get("shipping", {})
+        tags = raw.get("tags", [])
+        return Badges(
+            frete_gratis=shipping.get("free_shipping", False),
+            full=shipping.get("logistic_type") == "fulfillment",
+            premium="premium" in tags,
+            oficial=bool(raw.get("official_store_id")),
+            melhorei_preco="improved_price" in tags,
+            anuncio_patrocinado=bool(raw.get("advertising_info")),
+        )
+
+    def _extract_media(self, pictures: list) -> list[MediaItem]:
+        items = []
+        for i, pic in enumerate(pictures):
+            url = pic.get("url") or pic.get("secure_url", "")
+            if url:
+                items.append(MediaItem(
+                    url=url,
+                    tipo=MediaType.PHOTO,
+                    is_capa=(i == 0),
+                ))
+        return items
+
+    def _extract_text_blocks(self, raw: dict) -> TextBlocks:
+        bullets: list[str] = []
+        description: Optional[str] = None
+
+        # highlights / short description
+        hl = raw.get("highlights", [])
+        if hl:
+            bullets = [h.get("text", "") for h in hl if h.get("text")]
+
+        # descrição longa (vem do endpoint /descriptions)
+        for desc in raw.get("_descriptions", []):
+            if desc.get("plain_text"):
+                description = desc["plain_text"]
+                break
+
+        return TextBlocks(bullets=bullets, descricao=description)
+
+    def _extract_seo_terms(self, raw: dict) -> list[str]:
+        title = raw.get("title", "").lower()
+        terms = [w for w in title.split() if len(w) > 3]
+        return list(dict.fromkeys(terms))  # deduplica mantendo ordem
+
+    def _extract_social_proof(self, raw: dict) -> SocialProof:
+        return SocialProof(
+            avaliacoes_total=raw.get("reviews", {}).get("total", 0),
+            nota_media=float(raw.get("reviews", {}).get("rating_average") or 0),
+            vendas_estimadas=raw.get("sold_quantity"),
+        )
+
+    def _extract_category(self, raw: dict) -> list[str]:
+        # ML não retorna path completo na busca; retornamos o ID como fallback
+        cat_id = raw.get("category_id", "")
+        return [cat_id] if cat_id else []
+
+    @staticmethod
+    def _installments_max(raw: dict) -> Optional[int]:
+        inst = raw.get("installments", {})
+        return inst.get("quantity")
+
+    @staticmethod
+    def _installments_value(raw: dict) -> Optional[float]:
+        inst = raw.get("installments", {})
+        v = inst.get("amount")
+        return float(v) if v else None

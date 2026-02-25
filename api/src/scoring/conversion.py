@@ -1,259 +1,375 @@
 """
-Motor de Scoring - Conversão
+Motor de Scoring — Conversão e Competitividade.
+
+ConversionScorer: avalia o potencial do anúncio de converter visitantes em compradores.
+  - Prova social (avaliações, nota)
+  - Mídia (quantidade e qualidade de imagens)
+  - Badges (frete grátis, FULL, parcelamento)
+  - Preço vs concorrentes
+
+CompetitivenessScorer: avalia posição relativa vs mercado.
+  - Preço relativo
+  - Seller reputation
+  - FULL vs concorrentes
+  - Diferencial de conteúdo
 """
+from __future__ import annotations
 
-from typing import List, Dict, Any
-from api.src.types.listing import ListingNormalized
+from typing import Optional
+from api.src.types.listing import ListingNormalized, ScoreBreakdown
 
+
+# ── Conversão ─────────────────────────────────────────────────
 
 class ConversionScorer:
-    """
-    Calcula score de conversão para anúncios.
-    
-    Critérios avaliados:
-    - Prova social (reviews, rating)
-    - Selos (frete, oficial, full)
-    - Texto (bullets, descrição)
-    - Vendedor (reputação)
-    """
-    
+
     def score(
         self,
         listing: ListingNormalized,
-        competitors: List[ListingNormalized]
-    ) -> Dict[str, Any]:
-        """
-        Calcular score de conversão.
-        """
-        
-        factors = {}
-        
-        # 1. Prova social
-        social_score = self._score_social(listing)
-        factors["social"] = social_score
-        
-        # 2. Selos
-        badges_score = self._score_badges(listing)
-        factors["badges"] = badges_score
-        
-        # 3. Texto
-        text_score = self._score_text(listing)
-        factors["text"] = text_score
-        
-        # 4. Vendedor
-        seller_score = self._score_seller(listing)
-        factors["seller"] = seller_score
-        
-        # Score final
-        weights = {
-            "social": 0.30,
-            "badges": 0.30,
-            "text": 0.20,
-            "seller": 0.20
-        }
-        
-        final_score = sum(
-            factors[k]["score"] * weights[k]
-            for k in weights
+        competitors: Optional[list[ListingNormalized]] = None,
+    ) -> ScoreBreakdown:
+        competitors = competitors or []
+
+        s_social, sug_social = self._score_social(listing, competitors)
+        s_media, sug_media = self._score_media(listing)
+        s_badges, sug_badges = self._score_badges(listing, competitors)
+        s_price, sug_price = self._score_price(listing, competitors)
+
+        # Pesos: mídia (30%) + social (30%) + badges (25%) + preço (15%)
+        total = round(
+            s_media * 0.30
+            + s_social * 0.30
+            + s_badges * 0.25
+            + s_price * 0.15,
+            1,
         )
-        
-        suggestions = self._generate_suggestions(factors)
-        
-        return {
-            "score": round(final_score, 1),
-            "factors": factors,
-            "suggestions": suggestions,
-            "grade": self._get_grade(final_score)
-        }
-    
-    def _score_social(self, listing: ListingNormalized) -> Dict[str, Any]:
-        """Avaliar prova social"""
-        
-        social = listing.social_proof
-        score = 0
-        feedback = []
-        
-        # Avaliações
-        if social.avaliacoes >= 100:
-            score += 40
-        elif social.avaliacoes >= 50:
+
+        suggestions = sug_media + sug_social + sug_badges + sug_price
+
+        return ScoreBreakdown(
+            score=total,
+            label=self._label(total),
+            details={
+                "prova_social": round(s_social, 1),
+                "midia": round(s_media, 1),
+                "badges": round(s_badges, 1),
+                "preco": round(s_price, 1),
+            },
+            suggestions=suggestions[:6],
+        )
+
+    # ── Social Proof ──────────────────────────────────────────
+
+    def _score_social(
+        self,
+        listing: ListingNormalized,
+        competitors: list[ListingNormalized],
+    ) -> tuple[float, list[str]]:
+        sp = listing.social_proof
+        suggestions: list[str] = []
+        score = 0.0
+
+        # Avaliações: 0→30 pontos
+        rev = sp.avaliacoes_total
+        if rev >= 100:
             score += 30
-        elif social.avaliacoes >= 10:
+        elif rev >= 50:
+            score += 22
+        elif rev >= 20:
             score += 15
-        elif social.avaliacoes > 0:
-            score += 5
+        elif rev >= 5:
+            score += 8
         else:
-            feedback.append("Sem avaliações")
-        
-        # Nota média
-        if social.nota_media >= 4.8:
+            score += 0
+            suggestions.append(
+                f"Apenas {rev} avaliação(ões). Incentive clientes a avaliar "
+                "com mensagens pós-venda ou cupom."
+            )
+
+        # Nota: 0→40 pontos
+        rating = sp.nota_media
+        if rating >= 4.7:
+            score += 40
+        elif rating >= 4.3:
             score += 30
-        elif social.nota_media >= 4.5:
+        elif rating >= 3.8:
+            score += 18
+        elif rating > 0:
+            score += 8
+            suggestions.append(
+                f"Nota {rating:.1f} abaixo da média. Investigue reclamações e melhore "
+                "descrição/imagens para reduzir expectativa vs realidade."
+            )
+
+        # Vendas estimadas vs concorrentes: 0→30 pontos
+        my_sales = sp.vendas_estimadas or 0
+        if competitors:
+            avg_sales = sum(
+                (c.social_proof.vendas_estimadas or 0) for c in competitors
+            ) / max(len(competitors), 1)
+            ratio = my_sales / max(avg_sales, 1)
+            score += min(30, ratio * 30)
+        else:
+            score += 15  # neutro sem benchmark
+
+        return min(100.0, score), suggestions
+
+    # ── Mídia ─────────────────────────────────────────────────
+
+    def _score_media(self, listing: ListingNormalized) -> tuple[float, list[str]]:
+        suggestions: list[str] = []
+        count = listing.media_count
+        score = 0.0
+
+        if count >= 10:
+            score = 100
+        elif count >= 7:
+            score = 80
+        elif count >= 5:
+            score = 60
+            suggestions.append(
+                f"{count} imagens — adicione mais fotos (ângulos, detalhes, ambientação) "
+                "para atingir 7–10 fotos e aumentar confiança do comprador."
+            )
+        elif count >= 3:
+            score = 35
+            suggestions.append(
+                f"Apenas {count} imagens. O ideal é 7–10 fotos de alta resolução "
+                "(frente, lateral, detalhe de tecido, foto ambientada, dimensões)."
+            )
+        else:
+            score = 10
+            suggestions.append(
+                "Poucas ou nenhuma imagem. Anúncios com 7+ fotos convertem 3× mais. "
+                "Adicione fotos profissionais imediatamente."
+            )
+
+        return score, suggestions
+
+    # ── Badges ────────────────────────────────────────────────
+
+    def _score_badges(
+        self,
+        listing: ListingNormalized,
+        competitors: list[ListingNormalized],
+    ) -> tuple[float, list[str]]:
+        suggestions: list[str] = []
+        score = 0.0
+
+        if listing.badges.frete_gratis:
+            score += 40
+        else:
+            # Verifica se maioria dos concorrentes tem frete grátis
+            if competitors:
+                free_pct = sum(
+                    1 for c in competitors if c.badges.frete_gratis
+                ) / len(competitors)
+                if free_pct > 0.5:
+                    suggestions.append(
+                        f"{int(free_pct*100)}% dos concorrentes oferecem frete grátis. "
+                        "Avaliar absorver custo no preço ou negociar com transportadora."
+                    )
+
+        if listing.badges.full:
+            score += 30
+        elif listing.badges.frete_gratis:
+            pass  # já pontuou acima
+        else:
+            if competitors and any(c.badges.full for c in competitors):
+                suggestions.append(
+                    "Concorrentes com FULL/entrega rápida. Considere enviar estoque "
+                    "para o fulfillment do marketplace."
+                )
+
+        if listing.badges.parcelamento_sem_juros:
             score += 20
-        elif social.nota_media >= 4.0:
-            score += 10
-        elif social.nota_media > 0:
-            score += 5
         else:
-            feedback.append("Sem nota")
-        
-        # Perguntas e respostas
-        if social.perguntas > 0:
-            score += 15  # Engajamento
-        if social.respostas > 0:
-            score += 15
-        
-        return {
-            "score": min(score, 100),
-            "reviews": social.avaliacoes,
-            "rating": social.nota_media,
-            "feedback": feedback
+            suggestions.append(
+                "Ofereça parcelamento sem juros (6–12x). Aumenta ticket percebido "
+                "e reduz abandono por preço."
+            )
+
+        score += 10  # base
+
+        return min(100.0, score), suggestions
+
+    # ── Preço ─────────────────────────────────────────────────
+
+    def _score_price(
+        self,
+        listing: ListingNormalized,
+        competitors: list[ListingNormalized],
+    ) -> tuple[float, list[str]]:
+        suggestions: list[str] = []
+        if not competitors:
+            return 70.0, []
+
+        prices = [c.final_price_estimate for c in competitors if c.final_price_estimate > 0]
+        if not prices:
+            return 70.0, []
+
+        avg = sum(prices) / len(prices)
+        my = listing.final_price_estimate or listing.price
+        ratio = my / avg if avg else 1.0
+
+        if ratio <= 0.9:
+            score = 100.0
+        elif ratio <= 1.0:
+            score = 85.0
+        elif ratio <= 1.15:
+            score = 65.0
+            suggestions.append(
+                f"Preço {int((ratio-1)*100)}% acima da média (R$ {avg:.0f}). "
+                "Se não houver diferencial claro, considere ajustar."
+            )
+        elif ratio <= 1.30:
+            score = 45.0
+            suggestions.append(
+                f"Preço {int((ratio-1)*100)}% acima da média. "
+                "Destaque diferenciais (qualidade, garantia) nos bullets para justificar."
+            )
+        else:
+            score = 20.0
+            suggestions.append(
+                f"Preço muito acima da média (R$ {avg:.0f}). "
+                "Revise estratégia de precificação ou reposicione o produto."
+            )
+
+        return score, suggestions
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 80:
+            return "Excelente"
+        if score >= 65:
+            return "Bom"
+        if score >= 40:
+            return "Regular"
+        return "Ruim"
+
+
+# ── Competitividade ───────────────────────────────────────────
+
+class CompetitivenessScorer:
+
+    def score(
+        self,
+        listing: ListingNormalized,
+        competitors: list[ListingNormalized],
+    ) -> ScoreBreakdown:
+        if not competitors:
+            return ScoreBreakdown(
+                score=50.0,
+                label="Regular",
+                details={},
+                suggestions=["Adicione concorrentes para score de competitividade."],
+            )
+
+        s_price = self._relative_price_score(listing, competitors)
+        s_rep = self._reputation_score(listing)
+        s_content = self._content_advantage(listing, competitors)
+        s_velocity = self._sales_velocity(listing, competitors)
+
+        total = round(
+            s_price * 0.35
+            + s_rep * 0.25
+            + s_content * 0.25
+            + s_velocity * 0.15,
+            1,
+        )
+
+        return ScoreBreakdown(
+            score=total,
+            label=self._label(total),
+            details={
+                "preco_relativo": round(s_price, 1),
+                "reputacao_seller": round(s_rep, 1),
+                "vantagem_conteudo": round(s_content, 1),
+                "velocidade_vendas": round(s_velocity, 1),
+            },
+            suggestions=self._gen_suggestions(listing, competitors),
+        )
+
+    def _relative_price_score(
+        self, listing: ListingNormalized, competitors: list[ListingNormalized]
+    ) -> float:
+        prices = [c.final_price_estimate for c in competitors if c.final_price_estimate > 0]
+        if not prices:
+            return 50.0
+        avg = sum(prices) / len(prices)
+        my = listing.final_price_estimate or listing.price
+        ratio = my / avg
+        if ratio < 0.85:
+            return 100.0
+        if ratio < 1.0:
+            return 80.0
+        if ratio < 1.15:
+            return 60.0
+        if ratio < 1.3:
+            return 40.0
+        return 20.0
+
+    @staticmethod
+    def _reputation_score(listing: ListingNormalized) -> float:
+        from api.src.types.listing import SellerReputation
+        rep_scores = {
+            SellerReputation.PLATINUM: 100,
+            SellerReputation.GOLD: 80,
+            SellerReputation.SILVER: 55,
+            SellerReputation.BRONZE: 35,
+            SellerReputation.NEW: 15,
+            SellerReputation.UNKNOWN: 30,
         }
-    
-    def _score_badges(self, listing: ListingNormalized) -> Dict[str, Any]:
-        """Avaliar selos"""
-        
-        badges = listing.badges
-        score = 0
-        feedback = []
-        
-        if badges.frete_gratis:
-            score += 30
-        else:
-            feedback.append("Adicionar frete grátis")
-        
-        if badges.full:
-            score += 25
-        else:
-            feedback.append("Considere fulfillment full")
-        
-        if badges.oficial:
-            score += 25
-        elif badges.premium:
-            score += 15
-        
-        if badges.novo:
-            score += 10
-        
-        if badges.melhorei_preco:
-            score += 10
-        
-        return {
-            "score": min(score, 100),
-            "badges_count": sum([
-                badges.frete_gratis,
-                badges.full,
-                badges.oficial,
-                badges.premium,
-                badges.novo
-            ]),
-            "feedback": feedback
-        }
-    
-    def _score_text(self, listing: ListingNormalized) -> Dict[str, Any]:
-        """Avaliar texto do anúncio"""
-        
-        text = listing.text_blocks
-        score = 0
-        feedback = []
-        
-        # Bullets
-        bullet_count = len(text.bullets)
-        if bullet_count >= 5:
-            score += 40
-        elif bullet_count >= 3:
-            score += 25
-        elif bullet_count >= 1:
-            score += 10
-        else:
-            feedback.append("Adicionar bullets")
-        
-        # Descrição
-        desc_length = len(text.descricao or "")
-        if desc_length >= 500:
-            score += 40
-        elif desc_length >= 200:
-            score += 25
-        elif desc_length >= 50:
-            score += 15
-        else:
-            feedback.append("Descrição muito curta")
-        
-        # Verificar keywords nos bullets
-        if text.bullets:
-            score += 20
-        
-        return {
-            "score": min(score, 100),
-            "bullet_count": bullet_count,
-            "description_length": desc_length,
-            "feedback": feedback
-        }
-    
-    def _score_seller(self, listing: ListingNormalized) -> Dict[str, Any]:
-        """Avaliar vendedor"""
-        
-        seller = listing.seller
-        score = 0
-        feedback = []
-        
-        # Reputação
-        rep = seller.reputacao.value if seller.reputacao else "new"
-        if rep == "gold":
-            score += 40
-        elif rep == "silver":
-            score += 25
-        elif rep == "bronze":
-            score += 10
-        else:
-            feedback.append("Vendedor novo")
-        
-        # Tempo de mercado
-        if seller.tempo_mercado_meses:
-            if seller.tempo_mercado_meses >= 24:
-                score += 30
-            elif seller.tempo_mercado_meses >= 12:
-                score += 20
-            elif seller.tempo_mercado_meses >= 6:
-                score += 10
-        else:
-            feedback.append("Sem histórico")
-        
-        # Métricas
-        if seller.metricas:
-            if seller.metricas.vendas_12m and seller.metricas.vendas_12m >= 100:
-                score += 20
-        
-        # Loja oficial
-        if seller.tiene_tienda_oficial:
-            score += 10
-        
-        return {
-            "score": min(score, 100),
-            "reputation": rep,
-            "feedback": feedback
-        }
-    
-    def _generate_suggestions(self, factors: Dict) -> List[str]:
-        """Gerar sugestões"""
-        
-        suggestions = []
-        
-        for factor_name, factor_data in factors.items():
-            if factor_data["score"] < 60:
-                for feedback in factor_data.get("feedback", []):
-                    suggestions.append(f"[{factor_name.upper()}] {feedback}")
-        
-        return suggestions
-    
-    def _get_grade(self, score: float) -> str:
-        if score >= 90:
-            return "A"
-        elif score >= 80:
-            return "B"
-        elif score >= 70:
-            return "C"
-        elif score >= 60:
-            return "D"
-        else:
-            return "F"
+        return rep_scores.get(listing.seller.reputacao, 30)
+
+    def _content_advantage(
+        self, listing: ListingNormalized, competitors: list[ListingNormalized]
+    ) -> float:
+        avg_media = sum(c.media_count for c in competitors) / len(competitors)
+        avg_bullets = sum(len(c.text_blocks.bullets) for c in competitors) / len(competitors)
+        my_media_score = min(100, listing.media_count / max(avg_media, 1) * 100)
+        my_bullet_score = min(100, len(listing.text_blocks.bullets) / max(avg_bullets, 1) * 100)
+        return (my_media_score + my_bullet_score) / 2
+
+    def _sales_velocity(
+        self, listing: ListingNormalized, competitors: list[ListingNormalized]
+    ) -> float:
+        my = listing.social_proof.vendas_estimadas or 0
+        avg = sum(
+            (c.social_proof.vendas_estimadas or 0) for c in competitors
+        ) / max(len(competitors), 1)
+        if avg == 0:
+            return 50.0
+        return min(100, my / avg * 100)
+
+    @staticmethod
+    def _gen_suggestions(
+        listing: ListingNormalized, competitors: list[ListingNormalized]
+    ) -> list[str]:
+        sug = []
+        full_competitors = sum(1 for c in competitors if c.badges.full)
+        if full_competitors > len(competitors) * 0.4 and not listing.badges.full:
+            sug.append(
+                f"{full_competitors} concorrentes usam FULL/fulfillment. "
+                "Considere enviar estoque para o CD do marketplace."
+            )
+        platinum_count = sum(
+            1 for c in competitors
+            if c.seller.reputacao.value == "platinum"
+        )
+        if platinum_count > len(competitors) * 0.3:
+            sug.append(
+                f"{platinum_count} concorrentes são vendedores Platinum/Top. "
+                "Foque em conteúdo e preço para compensar reputação."
+            )
+        return sug[:4]
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 80:
+            return "Líder"
+        if score >= 65:
+            return "Competitivo"
+        if score >= 40:
+            return "Regular"
+        return "Fraco"

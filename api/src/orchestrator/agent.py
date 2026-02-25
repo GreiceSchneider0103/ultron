@@ -1,218 +1,275 @@
-import asyncio
-import json
-import os
-import time
-import logging
-import statistics
-from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
-from api.src.connectors.base import BaseConnector
-from api.src.utils.cache import async_lru_cache
-from api.src.types.analytics import MarketSummary, PriceStats
-from api.src.types.listing import ListingNormalized
+"""
+Orquestrador — MarketAgent.
 
-logger = logging.getLogger(__name__)
+Coordena todo o fluxo:
+  objetivo → coleta → normaliza → pontua → recomenda → gera relatório
+
+Fluxos disponíveis:
+  1. research_market()    → Pesquisa de mercado completa
+  2. audit_listing()      → Auditoria de anúncio existente
+  3. create_listing()     → Gerar anúncio do zero
+  4. compare_listings()   → Comparar dois anúncios
+"""
+from __future__ import annotations
+
+import asyncio
+from datetime import datetime
+from typing import Optional
+import structlog
+
+from api.src.config import get_settings
+from api.src.connectors.base import BaseConnector
+from api.src.connectors.mercado_livre import MercadoLivreConnector
+from api.src.connectors.magalu import MagaluConnector
+from api.src.pipeline.pipeline import DataPipeline
+from api.src.scoring.seo import SEOScorer
+from api.src.scoring.conversion import ConversionScorer, CompetitivenessScorer
+from api.src.functions.generator import (
+    generate_titles,
+    generate_bullets,
+    generate_description,
+    generate_full_listing,
+    generate_audit_recommendations,
+)
+from api.src.types.listing import (
+    ListingAuditResult,
+    ListingNormalized,
+    Marketplace,
+    MarketResearchResult,
+)
+
+log = structlog.get_logger()
+settings = get_settings()
+
+
+def _get_connectors() -> dict[str, BaseConnector]:
+    connectors: dict[str, BaseConnector] = {
+        "mercado_livre": MercadoLivreConnector(),
+        "magalu": MagaluConnector(),
+    }
+    return connectors
+
 
 class MarketAgent:
     """
-    Orquestrador com hardening: Timeout, Cache, Retry (via connector) e Persistência.
+    Agente principal. Instância única por request (stateless por design).
     """
-    def __init__(self, connectors: Dict[str, BaseConnector]):
-        self.connectors = connectors
-        self.storage_path = "data/reports"
-        os.makedirs(self.storage_path, exist_ok=True)
 
-    @async_lru_cache(ttl_seconds=600)
+    def __init__(self, connectors: Optional[dict[str, BaseConnector]] = None):
+        self.connectors = connectors or _get_connectors()
+        self.pipeline = DataPipeline()
+        self.seo_scorer = SEOScorer()
+        self.conv_scorer = ConversionScorer()
+        self.comp_scorer = CompetitivenessScorer()
+
+    # ── 1. Pesquisa de Mercado ────────────────────────────────
+
     async def research_market(
         self,
         keyword: str,
         marketplace: str = "mercado_livre",
         limit: int = 50,
-        timeout: int = 60,
-        request_id: Optional[str] = None
-    ) -> Union[MarketSummary, Dict[str, Any]]:
-        start_time = time.time()
-        try:
-            # Global timeout control
-            result = await asyncio.wait_for(
-                self._execute_research(keyword, marketplace, limit, request_id),
-                timeout=timeout
+    ) -> MarketResearchResult:
+        """
+        Coleta top anúncios → normaliza → agrega métricas → retorna resultado.
+        """
+        connector = self._get_connector(marketplace)
+        mp_enum = Marketplace(marketplace)
+
+        log.info("research_start", keyword=keyword, marketplace=marketplace)
+
+        # Coleta e normalização via conector
+        listings: list[ListingNormalized] = await connector.search_and_normalize(
+            query=keyword,
+            limit=limit,
+        )
+
+        if not listings:
+            log.warning("no_listings_found", keyword=keyword)
+            return MarketResearchResult(
+                keyword=keyword,
+                marketplace=mp_enum,
+                total_collected=0,
+                listings=[],
+                price_range={"min": 0, "max": 0, "avg": 0, "median": 0},
+                top_seo_terms=[],
+                competitor_summary={},
+                gaps=[],
             )
-            
-            # Structured logging for observability
-            logger.info(json.dumps({
-                "event": "tool_call",
-                "tool": "research_market",
-                "marketplace": marketplace,
-                "query": keyword,
-                "item_count": result.total_listings if isinstance(result, MarketSummary) else 0,
-                "duration_ms": round((time.time() - start_time) * 1000, 2),
-                "request_id": request_id
-            }))
-            return result
-            
-        except asyncio.TimeoutError:
-            return {
-                "status": "error",
-                "code": "TIMEOUT",
-                "message": f"Research timed out after {timeout}s"
-            }
-        except Exception as e:
-            # Structured error handling
-            return {
-                "status": "error",
-                "code": "INTERNAL_ERROR",
-                "message": str(e),
-                "details": type(e).__name__
-            }
 
-    async def _execute_research(self, keyword: str, marketplace: str, limit: int, request_id: Optional[str]) -> MarketSummary:
-        connector = self.connectors.get(marketplace)
-        if not connector:
-            raise ValueError(f"Connector {marketplace} not found")
+        # Pipeline: dedup + enrich + aggregate
+        result = await self.pipeline.run(
+            raw_listings=listings,
+            keyword=keyword,
+            marketplace=mp_enum,
+            save=False,  # sem Supabase por enquanto
+        )
 
-        listings = []
-        page = 1
-        
-        # Pagination support: fetch until N items
-        while len(listings) < limit:
-            batch = await connector.search(query=keyword, limit=limit, page=page, request_id=request_id)
-            if not batch:
-                break
-            
-            listings.extend(batch)
-            page += 1
-            
-            if len(batch) < 10: # Heuristic: small batch means end of results
-                break
-                
-        # Analytics Logic
-        valid_listings = [l for l in listings if l.get("price") is not None]
-        prices = sorted([float(l["price"]) for l in valid_listings])
-        
-        if not prices:
-            stats = PriceStats(min=0.0, max=0.0, median=0.0, avg=0.0)
-            outliers = []
-        else:
-            stats = PriceStats(
-                min=prices[0],
-                max=prices[-1],
-                median=statistics.median(prices),
-                avg=statistics.mean(prices)
+        log.info(
+            "research_done",
+            keyword=keyword,
+            total=result.total_collected,
+            gaps=len(result.gaps),
+        )
+        return result
+
+    # ── 2. Auditoria de Anúncio ───────────────────────────────
+
+    async def audit_listing(
+        self,
+        listing_id: str,
+        marketplace: str = "mercado_livre",
+        keyword: Optional[str] = None,
+        my_listing: Optional[ListingNormalized] = None,
+    ) -> ListingAuditResult:
+        """
+        Audita um anúncio vs top concorrentes.
+        Pode receber o objeto pronto (my_listing) ou buscar pelo listing_id.
+        """
+        connector = self._get_connector(marketplace)
+        mp_enum = Marketplace(marketplace)
+
+        # Busca anúncio se não fornecido
+        if my_listing is None:
+            raw = await connector.get_listing_details(listing_id)
+            my_listing = await connector.normalize(raw)
+
+        kw = keyword or my_listing.title.split()[:4]
+        kw_str = keyword or " ".join(my_listing.title.split()[:4])
+
+        # Busca concorrentes
+        research = await self.research_market(kw_str, marketplace, limit=30)
+        competitors = research.listings[:20]
+        top_terms = [item["term"] for item in research.top_seo_terms[:15]]
+
+        # Scores
+        seo = self.seo_scorer.score(my_listing, competitors)
+        conv = self.conv_scorer.score(my_listing, competitors)
+        comp = self.comp_scorer.score(my_listing, competitors)
+
+        overall = round(seo.score * 0.35 + conv.score * 0.40 + comp.score * 0.25, 1)
+
+        # Geração de texto com IA
+        titles = await generate_titles(
+            keyword=kw_str,
+            marketplace=marketplace,
+            attributes=my_listing.attributes.model_dump(exclude_none=True),
+            top_terms=top_terms,
+        )
+
+        ai_recs = {}
+        if settings.check_ai_configured():
+            ai_recs = await generate_audit_recommendations(
+                listing=my_listing,
+                competitors=competitors,
+                seo_score=seo.score,
+                conversion_score=conv.score,
+                top_seo_terms=top_terms,
             )
-            
-            # Outliers (IQR method)
-            if len(prices) >= 4:
-                q1 = prices[int(len(prices) * 0.25)]
-                q3 = prices[int(len(prices) * 0.75)]
-                iqr = q3 - q1
-                lower_bound = q1 - 1.5 * iqr
-                upper_bound = q3 + 1.5 * iqr
-                outliers = [l for l in valid_listings if float(l["price"]) < lower_bound or float(l["price"]) > upper_bound]
-            else:
-                outliers = []
 
-        # Grouping
-        seller_dist = {}
-        shipping_dist = {}
-        
-        for l in valid_listings:
-            # Seller grouping
-            s_type = "regular"
-            if l.get("official_store_id"): s_type = "official"
-            elif l.get("seller", {}).get("seller_reputation", {}).get("power_seller_status"):
-                s_type = l["seller"]["seller_reputation"]["power_seller_status"]
-            seller_dist[s_type] = seller_dist.get(s_type, 0) + 1
-            
-            # Shipping grouping
-            sh_type = l.get("shipping", {}).get("logistic_type", "standard")
-            if l.get("shipping", {}).get("free_shipping"): sh_type += "_free"
-            shipping_dist[sh_type] = shipping_dist.get(sh_type, 0) + 1
+        top_actions = (
+            [a["acao"] for a in ai_recs.get("acoes", [])[:10]]
+            if ai_recs
+            else seo.suggestions[:5] + conv.suggestions[:3] + comp.suggestions[:2]
+        )
 
-        summary = MarketSummary(
+        return ListingAuditResult(
+            listing_id=listing_id,
+            marketplace=mp_enum,
+            seo_score=seo,
+            conversion_score=conv,
+            competitiveness_score=comp,
+            overall_score=overall,
+            top_actions=top_actions,
+            generated_titles=titles,
+        )
+
+    # ── 3. Criar Anúncio do Zero ──────────────────────────────
+
+    async def create_listing(
+        self,
+        keyword: str,
+        marketplace: str = "mercado_livre",
+        attributes: Optional[dict] = None,
+    ) -> dict:
+        """
+        Gera anúncio completo (títulos, bullets, descrição, keywords ADS,
+        pauta fotográfica, sugestão de preço e ideias de A/B test).
+        """
+        if not settings.check_ai_configured():
+            return {
+                "error": "IA não configurada. Defina OPENAI_API_KEY ou ANTHROPIC_API_KEY no .env"
+            }
+
+        # Coleta contexto de mercado
+        research = await self.research_market(keyword, marketplace, limit=30)
+        top_terms = [item["term"] for item in research.top_seo_terms[:15]]
+
+        result = await generate_full_listing(
             keyword=keyword,
             marketplace=marketplace,
-            total_listings=len(listings),
-            price_stats=stats,
-            seller_distribution=seller_dist,
-            shipping_distribution=shipping_dist,
-            outliers=outliers,
-            timestamp=datetime.now()
+            attributes=attributes,
+            top_terms=top_terms,
+            price_range=research.price_range,
         )
-        
-        # Simple persistence
-        safe_key = "".join(c for c in keyword if c.isalnum())
-        filename = f"{self.storage_path}/{safe_key}_{marketplace}.json"
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(summary.model_dump_json(indent=2))
-        
-        # DB Persistence (Optional Layer)
-        try:
-            from api.src.database import save_research_run
-            save_research_run(summary, listings)
-        except Exception as e:
-            logger.warning(f"DB Persistence failed (execution continued): {e}")
 
-        return summary
+        result["market_context"] = {
+            "keyword": keyword,
+            "total_competitors": research.total_collected,
+            "price_range": research.price_range,
+            "top_seo_terms": top_terms,
+            "gaps": research.gaps,
+        }
 
-    # --- Operational Intelligence (Magalu Flow) ---
-    
-    async def analyze_operations(self, marketplace: str = "magalu") -> Dict[str, Any]:
-        """
-        Fluxo de Inteligência Operacional:
-        get_skus -> enrich -> normalize -> score -> save
-        """
+        return result
+
+    # ── 4. Comparar dois anúncios ─────────────────────────────
+
+    async def compare_listings(
+        self,
+        listing_id_a: str,
+        listing_id_b: str,
+        marketplace: str = "mercado_livre",
+    ) -> dict:
+        connector = self._get_connector(marketplace)
+
+        raw_a, raw_b = await asyncio.gather(
+            connector.get_listing_details(listing_id_a),
+            connector.get_listing_details(listing_id_b),
+        )
+        listing_a = await connector.normalize(raw_a)
+        listing_b = await connector.normalize(raw_b)
+
+        seo_a = self.seo_scorer.score(listing_a)
+        seo_b = self.seo_scorer.score(listing_b)
+        conv_a = self.conv_scorer.score(listing_a)
+        conv_b = self.conv_scorer.score(listing_b)
+
+        return {
+            "listing_a": {
+                "id": listing_id_a,
+                "title": listing_a.title,
+                "price": listing_a.price,
+                "seo_score": seo_a.score,
+                "conv_score": conv_a.score,
+            },
+            "listing_b": {
+                "id": listing_id_b,
+                "title": listing_b.title,
+                "price": listing_b.price,
+                "seo_score": seo_b.score,
+                "conv_score": conv_b.score,
+            },
+            "winner": listing_id_a if (seo_a.score + conv_a.score) > (seo_b.score + conv_b.score) else listing_id_b,
+        }
+
+    # ── Helpers ───────────────────────────────────────────────
+
+    def _get_connector(self, marketplace: str) -> BaseConnector:
         connector = self.connectors.get(marketplace)
         if not connector:
-            raise ValueError(f"Connector {marketplace} not found")
-            
-        # 1. Get SKUs (Portfolio)
-        raw_products = await connector.search(query="", limit=100) # Empty query = list all
-        
-        results = []
-        for raw in raw_products:
-            # 2. Normalize
-            normalized: ListingNormalized = await connector.normalize_listing(raw)
-            
-            # 3. Enrich (Get Score from Magalu)
-            if hasattr(connector, 'get_product_score'):
-                score_data = await connector.get_product_score(normalized.listing_id)
-                normalized.ai_insights = {"magalu_score": score_data}
-            
-            results.append(normalized)
-            
-        # TODO: Save to DB (Operational Table)
-        return {"total_skus": len(results), "data": results}
-
-    async def audit_my_listing(self, my_listing: ListingNormalized, keyword: str) -> Dict[str, Any]:
-        """
-        Audita um anúncio comparando com o mercado.
-        """
-        # 1. Coleta dados do mercado
-        market_data = await self.research_market(keyword=keyword, marketplace=my_listing.marketplace)
-        
-        # 2. Gera score (Stub - Implementar lógica real de scoring depois)
-        # TODO: Integrar com api.src.scoring
-        score = {
-            "seo": 85,
-            "price_competitiveness": "high" if my_listing.price < market_data.price_stats.avg else "low",
-            "market_avg_price": market_data.price_stats.avg
-        }
-        
-        return {
-            "listing_id": my_listing.listing_id,
-            "audit_score": score,
-            "market_summary": market_data
-        }
-
-    async def suggest_title(self, keyword: str, attributes: dict, marketplace: str) -> List[str]:
-        """
-        Sugere títulos baseados na keyword e atributos.
-        """
-        # Stub implementation
-        base = f"{keyword} {attributes.get('marca', '')} {attributes.get('modelo', '')}"
-        return [
-            f"{base} - Oferta Limitada",
-            f"{base} - Frete Grátis",
-            f"{base} - Original"
-        ]
+            raise ValueError(
+                f"Connector '{marketplace}' não encontrado. "
+                f"Disponíveis: {list(self.connectors.keys())}"
+            )
+        return connector

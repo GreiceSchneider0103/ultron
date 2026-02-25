@@ -1,165 +1,260 @@
 """
-Conector do Magalu - Foco em Inteligência Operacional (Seller Data)
+Connector Magalu — Scraping HTTP controlado com headers de browser.
+
+A Magalu não oferece API pública para parceiros externos.
+Este conector usa a API interna do site (endpoints JSON não documentados,
+mas estáveis) com delay configurável para não gerar bloqueio.
+
+Rate limit sugerido: 1,5 s entre requisições (configurável via MAGALU_SCRAPING_DELAY_MS).
 """
+from __future__ import annotations
 
-import logging
-from typing import List, Dict, Any, Optional
+import asyncio
+import re
 from datetime import datetime
-import httpx
+from typing import Any, Optional
+import structlog
 
+from api.src.config import get_settings
 from api.src.connectors.base import BaseConnector
-from api.src.types.listing import ListingNormalized, Marketplace, Seller
-from api.src.config import settings
+from api.src.types.listing import (
+    Badges, ListingAttributes, ListingNormalized, Marketplace,
+    MediaItem, MediaType, Seller, SellerReputation,
+    SocialProof, TextBlocks,
+)
 
-logger = logging.getLogger(__name__)
+log = structlog.get_logger()
+settings = get_settings()
+
 
 class MagaluConnector(BaseConnector):
-    """
-    Conector Magalu focado em operações de Seller (Portfólio, Preço, Estoque).
-    Usa endpoints de Seller API.
-    """
-    
-    def __init__(self, access_token: Optional[str] = None):
-        token = access_token or settings.MAGALU_ACCESS_TOKEN
-        super().__init__(api_key=token)
-        
-        self.channel_id = settings.MAGALU_CHANNEL_ID
-        self.base_url = settings.MAGALU_SANDBOX_BASE_URL if settings.MAGALU_USE_SANDBOX else settings.MAGALU_BASE_URL
-        self.auth_url = "https://id-sandbox.magalu.com" if settings.MAGALU_USE_SANDBOX else "https://id.magalu.com"
-        
-        self.headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "X-Channel-Id": self.channel_id,
-            "Content-Type": "application/json"
+    marketplace_name = "magalu"
+
+    # Endpoints internos do site — suficientemente estáveis
+    SEARCH_URL = "https://www.magazineluiza.com.br/busca/{query}/"
+    SEARCH_API = "https://www.magazineluiza.com.br/busca/{query}/?page={page}&go=0"
+    PRODUCT_API = "https://www.magazineluiza.com.br/{slug}/p/{sku}/"
+
+    def __init__(self):
+        delay_ms = settings.magalu_scraping_delay_ms
+        super().__init__()
+        self.rate_limit_delay = delay_ms / 1000
+
+    def _default_headers(self) -> dict:
+        return {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/120.0.0.0 Safari/537.36"
+            ),
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Referer": "https://www.magazineluiza.com.br/",
+            "sec-ch-ua-platform": '"Windows"',
         }
 
-    async def authenticate(self) -> str:
-        """Obtém token OAuth (Fluxo Client Credentials)"""
-        if not settings.MAGALU_CLIENT_ID or not settings.MAGALU_CLIENT_SECRET:
-            logger.warning("Magalu Client ID/Secret not provided.")
-            return ""
-            
-        url = f"{self.auth_url}/oauth/token"
-        auth = (settings.MAGALU_CLIENT_ID, settings.MAGALU_CLIENT_SECRET)
-        data = {"grant_type": "client_credentials", "scope": "orders catalog"}
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(url, auth=auth, data=data)
-                resp.raise_for_status()
-                token_data = resp.json()
-                self.api_key = token_data.get("access_token")
-                # Atualiza headers
-                self.headers["Authorization"] = f"Bearer {self.api_key}"
-                return self.api_key
-        except Exception as e:
-            logger.error(f"Magalu Auth Failed: {e}")
-            return ""
+    # ── Busca ─────────────────────────────────────────────────
 
-    async def _get(self, endpoint: str, params: Dict = None) -> Dict:
-        url = f"{self.base_url}{endpoint}"
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers=self.headers, params=params)
-            resp.raise_for_status()
-            return resp.json()
+    async def search(
+        self,
+        query: str,
+        category_id: Optional[str] = None,
+        limit: int = 48,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """
+        Usa o endpoint de busca do Magalu.
+        Retorna lista de produtos em formato normalizado internamente.
+        """
+        slug = query.lower().replace(" ", "%20")
+        page = (offset // 48) + 1
+        url = self.SEARCH_API.format(query=slug, page=page)
 
-    async def get_price(self, sku: str) -> Dict[str, Any]:
-        """
-        GET /seller/v1/portfolios/prices/:sku
-        Retorna dados de preço e status do SKU.
-        """
         try:
-            return await self._get(f"/seller/v1/portfolios/prices/{sku}")
-        except Exception as e:
-            logger.error(f"Erro ao buscar preço Magalu para {sku}: {e}")
-            return {}
-
-    async def get_scores(self, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
-        """
-        GET /seller/v1/portfolios/products/scores
-        Retorna scores de qualidade dos produtos.
-        """
-        try:
-            params = {"limit": limit, "offset": offset}
-            # A resposta geralmente vem envelopada ou em lista direta, dependendo da versão.
-            # Assumindo lista direta ou chave 'results' conforme padrão REST comum
-            data = await self._get("/seller/v1/portfolios/products/scores", params=params)
-            return data if isinstance(data, list) else data.get("results", [])
-        except Exception as e:
-            logger.error(f"Erro ao buscar scores Magalu: {e}")
+            html = await self._get_html(url)
+            return self._parse_search_html(html, limit)
+        except Exception as exc:
+            log.error("magalu_search_error", error=str(exc), query=query)
             return []
 
-    async def get_details(self, sku: str) -> Dict[str, Any]:
+    async def get_listing_details(self, listing_id: str) -> dict[str, Any]:
         """
-        Combina Price e Score para detalhe (Operacional).
+        Busca dados completos de um produto pelo SKU/ID.
+        O Magalu usa URLs no formato /produto-nome/p/IDSKU/
         """
-        price_data = await self.get_price(sku)
-        # Score não tem endpoint por SKU individual documentado aqui, 
-        # mas vamos retornar o que temos.
-        return {
-            "sku": sku,
-            "price_data": price_data,
-            # Score teria que ser buscado na lista geral, o que é custoso aqui.
-            # Deixamos vazio ou implementamos cache depois.
-        }
+        # listing_id deve ser o SKU (ex: "232671800")
+        api_url = f"https://www.magazineluiza.com.br/produto/{listing_id}/"
+        try:
+            html = await self._get_html(api_url)
+            return self._parse_product_html(html, listing_id)
+        except Exception as exc:
+            log.error("magalu_detail_error", error=str(exc), id=listing_id)
+            return {}
 
-    async def search(self, query: str, category: Optional[str] = None, limit: int = 50, page: int = 1, request_id: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        NÃO SUPORTADO: Search concorrente via Seller API.
-        """
-        logger.warning("Search concorrente não suportado na Magalu Seller API.")
-        return []
+    async def get_seller_details(self, seller_id: str) -> dict[str, Any]:
+        """Magalu não expõe perfil público de seller via API."""
+        return {"seller_id": seller_id, "nome": "Magalu / Parceiro"}
 
-    async def normalize_listing(self, raw_data: Dict[str, Any]) -> ListingNormalized:
-        """
-        Normaliza dados operacionais (Price + Score) para ListingNormalized.
-        Espera receber um dict combinado ou o retorno de get_price.
-        """
-        # Extração defensiva
-        sku = raw_data.get("sku", raw_data.get("id", "unknown"))
-        price_info = raw_data.get("price_data", raw_data) # Se vier direto do get_price
-        
-        # Mapeamento de campos (ajustar conforme resposta real da API)
-        price = float(price_info.get("price", 0.0))
-        list_price = float(price_info.get("list_price", 0.0))
-        
-        # Score (se disponível)
-        score_data = raw_data.get("score_data", {})
-        
-        return ListingNormalized(
-            marketplace=Marketplace.MAGALU,
-            listing_id=str(sku),
-            url=f"https://www.magazineluiza.com.br/produto/{sku}",
-            title=f"Produto SKU {sku}", # Seller API de preço as vezes não retorna titulo
-            price=price,
-            final_price_estimate=price,
-            seller=Seller(
-                seller_id=self.channel_id,
-                nome="Loja Própria"
-            ),
-            scraped_at=datetime.now(),
-            original_data=raw_data
-        )
-        
-        return ListingNormalized(
-            marketplace=Marketplace.MAGALU,
-            listing_id=str(sku),
-            url=f"https://www.magazineluiza.com.br/produto/{sku}",
-            title=title,
-            price=price,
-            final_price_estimate=price,
-            seller=Seller(
-                seller_id=self.channel_id,
-                nome="Loja Própria (Sandbox)"
-            ),
-            scraped_at=datetime.now(),
-            original_data=raw_data
+    # ── Normalização ──────────────────────────────────────────
+
+    async def normalize(self, raw: dict[str, Any]) -> ListingNormalized:
+        price = float(raw.get("price") or 0)
+        shipping = 0.0 if raw.get("free_shipping") else float(raw.get("shipping_cost") or 0)
+
+        seller = Seller(
+            seller_id=raw.get("seller_id", "magalu"),
+            nome=raw.get("seller_name", "Magazine Luiza"),
+            reputacao=SellerReputation.GOLD,  # Magalu marketplace parceiros variam
         )
 
-    def validate_title(self, title: str) -> Dict[str, Any]:
-        """Valida título conforme regras do Magalu"""
+        attributes = self._extract_attributes(raw.get("attributes", {}))
+        badges = self._extract_badges(raw)
+        media = self._extract_media(raw.get("images", []))
+        text_blocks = TextBlocks(
+            bullets=raw.get("bullets", []),
+            descricao=raw.get("description"),
+        )
+        seo_terms = self._extract_seo_terms(raw.get("title", ""))
+
+        return ListingNormalized(
+            marketplace=Marketplace.MAGALU,
+            listing_id=raw.get("sku", raw.get("id", "")),
+            url=raw.get("url", ""),
+            price=price,
+            price_original=raw.get("original_price"),
+            shipping_cost=shipping,
+            final_price_estimate=price + shipping,
+            installments_max=raw.get("installments_max"),
+            installments_value=raw.get("installments_value"),
+            category_path=raw.get("category_path", []),
+            title=raw.get("title", ""),
+            attributes=attributes,
+            text_blocks=text_blocks,
+            media=media,
+            media_count=len(media),
+            seller=seller,
+            social_proof=SocialProof(
+                avaliacoes_total=raw.get("review_count", 0),
+                nota_media=float(raw.get("rating") or 0),
+            ),
+            badges=badges,
+            seo_terms=seo_terms,
+            scraped_at=datetime.utcnow(),
+        )
+
+    # ── Parsers HTML internos ──────────────────────────────────
+
+    async def _get_html(self, url: str) -> str:
+        resp = await self._client.get(url)
+        resp.raise_for_status()
+        return resp.text
+
+    def _parse_search_html(self, html: str, limit: int) -> list[dict]:
+        """
+        Extrai dados de produtos do HTML da página de busca.
+        O Magalu embute JSON no script __NEXT_DATA__.
+        """
+        results = []
+        # Extrai __NEXT_DATA__ JSON
+        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+        if not match:
+            log.warning("magalu_no_next_data")
+            return results
+
+        import json
+        try:
+            data = json.loads(match.group(1))
+            # Caminho típico no NEXT_DATA do Magalu
+            props = data.get("props", {}).get("pageProps", {})
+            search_data = (
+                props.get("data", {})
+                .get("search", {})
+                .get("products", [])
+            )
+            for item in search_data[:limit]:
+                results.append(self._flatten_search_item(item))
+        except (json.JSONDecodeError, KeyError) as exc:
+            log.error("magalu_parse_error", error=str(exc))
+
+        return results
+
+    def _parse_product_html(self, html: str, sku: str) -> dict:
+        """Extrai detalhes do produto do __NEXT_DATA__."""
+        import json
+        match = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+        if not match:
+            return {"sku": sku}
+        try:
+            data = json.loads(match.group(1))
+            product = (
+                data.get("props", {})
+                .get("pageProps", {})
+                .get("data", {})
+                .get("product", {})
+            )
+            product["sku"] = sku
+            return product
+        except Exception:
+            return {"sku": sku}
+
+    @staticmethod
+    def _flatten_search_item(item: dict) -> dict:
+        """Converte item do formato Magalu para formato interno."""
+        price_info = item.get("price", {})
         return {
-            "is_valid": len(title) <= 60,
-            "length": len(title),
-            "errors": ["Title too long"] if len(title) > 60 else []
+            "sku": item.get("sku", item.get("id", "")),
+            "title": item.get("title", ""),
+            "url": f"https://www.magazineluiza.com.br{item.get('url', '')}",
+            "price": price_info.get("bestPrice") or price_info.get("price", 0),
+            "original_price": price_info.get("price"),
+            "free_shipping": item.get("freeShipping", False),
+            "rating": item.get("rating", {}).get("average", 0),
+            "review_count": item.get("rating", {}).get("count", 0),
+            "images": [item.get("image", "")] if item.get("image") else [],
+            "seller_id": item.get("seller", {}).get("id", "magalu"),
+            "seller_name": item.get("seller", {}).get("description", "Magazine Luiza"),
+            "category_path": item.get("categoryPath", "").split(" > "),
+            "installments_max": item.get("installment", {}).get("quantity"),
+            "installments_value": item.get("installment", {}).get("amount"),
         }
+
+    def _extract_attributes(self, attrs: dict) -> ListingAttributes:
+        return ListingAttributes(
+            cor=attrs.get("cor") or attrs.get("Cor"),
+            material=attrs.get("material") or attrs.get("Material"),
+            largura_cm=self._parse_float(attrs.get("largura") or attrs.get("Largura")),
+            profundidade_cm=self._parse_float(attrs.get("profundidade") or attrs.get("Profundidade")),
+            altura_cm=self._parse_float(attrs.get("altura") or attrs.get("Altura")),
+            peso_kg=self._parse_float(attrs.get("peso") or attrs.get("Peso")),
+            extras={k: str(v) for k, v in attrs.items()},
+        )
+
+    @staticmethod
+    def _parse_float(val: Any) -> Optional[float]:
+        if val is None:
+            return None
+        try:
+            return float(str(val).replace(",", ".").split()[0])
+        except (ValueError, TypeError):
+            return None
+
+    def _extract_badges(self, raw: dict) -> Badges:
+        return Badges(
+            frete_gratis=raw.get("free_shipping", False),
+            full=raw.get("fulfillment", False),
+            anuncio_patrocinado=raw.get("sponsored", False),
+        )
+
+    @staticmethod
+    def _extract_media(images: list) -> list[MediaItem]:
+        items = []
+        for i, url in enumerate(images):
+            if url:
+                items.append(MediaItem(url=url, tipo=MediaType.PHOTO, is_capa=(i == 0)))
+        return items
+
+    @staticmethod
+    def _extract_seo_terms(title: str) -> list[str]:
+        words = title.lower().split()
+        return list(dict.fromkeys(w for w in words if len(w) > 3))

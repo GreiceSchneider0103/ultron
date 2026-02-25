@@ -1,177 +1,194 @@
 """
-Tipos de dados para normalização de anúncios
-Segue o padrão ListingNormalized obrigatório
+Schema canônico para todos os anúncios coletados.
+Todo conector DEVE produzir um objeto ListingNormalized.
 """
-
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, Field
+from __future__ import annotations
+from typing import Optional, List
 from enum import Enum
 from datetime import datetime
-import logging
 
-logger = logging.getLogger(__name__)
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
+
+# ── Enumerações ───────────────────────────────────────────────
 
 class Marketplace(str, Enum):
-    """Marketplaces suportados"""
     MERCADO_LIVRE = "mercado_livre"
     MAGALU = "magalu"
 
 
-class ShippingType(str, Enum):
-    """Tipos de frete"""
-    FRETE_GRATIS = "frete_gratis"
-    FRETE_PAGO = "frete_pago"
-    FULL = "full"
+class MediaType(str, Enum):
+    PHOTO = "photo"
+    VIDEO = "video"
 
 
-class ReputationLevel(str, Enum):
-    """Níveis de reputação do vendedor"""
+class SellerReputation(str, Enum):
+    PLATINUM = "platinum"
     GOLD = "gold"
     SILVER = "silver"
     BRONZE = "bronze"
     NEW = "new"
+    UNKNOWN = "unknown"
 
+
+# ── Sub-schemas ───────────────────────────────────────────────
 
 class ListingAttributes(BaseModel):
-    """Atributos do produto (dimensões, material, etc)"""
+    """Atributos físicos e técnicos do produto."""
     cor: Optional[str] = None
     material: Optional[str] = None
-    largura: Optional[float] = None
-    profundidade: Optional[float] = None
-    altura: Optional[float] = None
-    peso: Optional[float] = None
-    densidade: Optional[str] = None
-    
-    # Campos específicos para móveis/estofados
-    tipo_sofa: Optional[str] = None
+    largura_cm: Optional[float] = None
+    profundidade_cm: Optional[float] = None
+    altura_cm: Optional[float] = None
+    peso_kg: Optional[float] = None
+    densidade: Optional[str] = None          # ex: "33 kg/m³"
+    tipo_produto: Optional[str] = None       # ex: "sofá retrátil"
     numero_lugares: Optional[int] = None
     tecido: Optional[str] = None
-    formato: Optional[str] = None
-    capacidade: Optional[int] = None
+    extras: dict = Field(default_factory=dict)  # atributos livres do marketplace
 
 
 class MediaItem(BaseModel):
-    """Item de mídia (imagem ou vídeo)"""
     url: str
-    tipo: str = "foto"  # foto, video
+    tipo: MediaType = MediaType.PHOTO
     is_capa: bool = False
-    tags: List[str] = Field(default_factory=list, description="Tags geradas por IA (Vision)")
+    has_text_overlay: Optional[bool] = None   # detectado por visão computacional
+    quality_score: Optional[float] = None     # 0-100
 
 
 class SellerMetrics(BaseModel):
-    """Métricas do vendedor"""
     vendas_12m: Optional[int] = None
-    reputacao: Optional[float] = None
-    tempo_mercado_meses: Optional[int] = None
-    perguntas_respondidas: Optional[int] = None
-    delayed_rate: Optional[float] = None  # taxa de atraso
+    cancelamentos_pct: Optional[float] = None
+    reclamacoes_pct: Optional[float] = None
+    atraso_entrega_pct: Optional[float] = None
 
 
 class Seller(BaseModel):
-    """Informações do vendedor"""
     seller_id: str
     nome: str
-    reputacao: ReputationLevel = ReputationLevel.NEW
+    reputacao: SellerReputation = SellerReputation.UNKNOWN
     tempo_mercado_meses: Optional[int] = None
     metricas: Optional[SellerMetrics] = None
-    tiene_tienda_oficial: Optional[bool] = None  # loja oficial
-    tiene_CDI: Optional[bool] = None
+    is_official_store: bool = False
 
 
 class SocialProof(BaseModel):
-    """Prova social (avaliações, perguntas)"""
-    avaliacoes: int = 0
+    avaliacoes_total: int = 0
     nota_media: float = 0.0
-    perguntas: int = 0
-    respostas: int = 0
+    perguntas_total: int = 0
+    respostas_total: int = 0
+    vendas_estimadas: Optional[int] = None   # quando disponível
 
 
 class Badges(BaseModel):
-    """Selos do anúncio"""
     frete_gratis: bool = False
-    full: bool = False
+    full: bool = False            # ML FULL / entrega rápida
     premium: bool = False
-    oficial: bool = False
+    oficial: bool = False         # loja oficial
     melhorei_preco: bool = False
-    novo: bool = False
-    melhores_opcoes: bool = False
+    anuncio_patrocinado: bool = False
+    parcelamento_sem_juros: bool = False
 
 
 class TextBlocks(BaseModel):
-    """Blocos de texto do anúncio"""
     bullets: List[str] = Field(default_factory=list)
     descricao: Optional[str] = None
+    faq: List[dict] = Field(default_factory=list)   # [{pergunta, resposta}]
 
+
+# ── Schema principal ──────────────────────────────────────────
 
 class ListingNormalized(BaseModel):
     """
-    FORMATO OBRIGATÓRIO para todos os anúncios
-    
-    Este é o schema padrão que TODO anúncio deve seguir
-    após passar pelo pipeline de normalização.
+    Formato canônico único para anúncios de qualquer marketplace.
+    Produzido por cada Connector e consumido por Pipeline, Scoring e Orquestrador.
     """
     # Identificação
     marketplace: Marketplace
     listing_id: str
     url: str
-    
-    # Informações principais
-    title: str
-    price: float
-    currency: str = "BRL"
+
+    # Preços
+    price: float                          # preço atual
+    price_original: Optional[float] = None  # preço sem desconto
     shipping_cost: float = 0.0
-    final_price_estimate: float = Field(description="Preço final estimado (price + shipping)")
-    
-    # Categoria
-    category_path: List[str] = Field(default_factory=list)
+    final_price_estimate: float           # price + shipping_cost
+    installments_max: Optional[int] = None
+    installments_value: Optional[float] = None
+
+    # Categorização
+    category_path: List[str] = Field(default_factory=list)   # ["Móveis", "Sofás"]
     category_id: Optional[str] = None
-    
-    # Atributos do produto
+
+    # Conteúdo
+    title: str
     attributes: ListingAttributes = Field(default_factory=ListingAttributes)
-    
+    text_blocks: TextBlocks = Field(default_factory=TextBlocks)
+
     # Mídia
     media: List[MediaItem] = Field(default_factory=list)
-    
-    # Vendedor
+    media_count: int = 0
+
+    # Seller
     seller: Seller
-    
+
     # Prova social
     social_proof: SocialProof = Field(default_factory=SocialProof)
-    
-    # Selos
+
+    # Badges / diferenciais
     badges: Badges = Field(default_factory=Badges)
-    
-    # Texto
-    text_blocks: TextBlocks = Field(default_factory=TextBlocks)
-    
+
     # SEO
-    seo_terms: List[str] = Field(default_factory=list, description="Palavras-chave extraídas do título")
-    
-    # Análise IA (Novos campos para o Agente)
-    ai_insights: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Insights gerados pelo LLM/Vision")
-    
-    # Metadados
-    scraped_at: datetime = Field(default_factory=datetime.now)
-    original_data: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Dados originais antes da normalização")
-    
-    model_config = {
-        "json_schema_extra": {
-            "example": {
-                "marketplace": "mercado_livre",
-                "listing_id": "MLB123456789",
-                "title": "Sofá Retrátil 3 Lugares Veludo Cinza - Com Chaise",
-                "price": 2599.90,
-                "final_price_estimate": 2599.90,
-                "attributes": {
-                    "tipo_sofa": "retrátil",
-                    "numero_lugares": 3,
-                    "tecido": "veludo",
-                    "cor": "cinza",
-                    "largura": 220,
-                    "profundidade": 85,
-                    "altura": 95
-                }
-            }
-        }
-    }
+    seo_terms: List[str] = Field(default_factory=list)   # termos extraídos do título+desc
+
+    # Metadados de coleta
+    scraped_at: datetime = Field(default_factory=datetime.utcnow)
+    position_in_search: Optional[int] = None   # posição no resultado de busca
+
+    @field_validator("final_price_estimate", mode="before")
+    @classmethod
+    def set_final_price(cls, v, info):
+        if v is None and info.data:
+            return info.data.get("price", 0) + info.data.get("shipping_cost", 0)
+        return v
+
+    @field_validator("media_count", mode="before")
+    @classmethod
+    def set_media_count(cls, v, info):
+        if v == 0 and info.data and info.data.get("media"):
+            return len(info.data["media"])
+        return v
+
+
+# ── Schemas de scoring (saídas) ───────────────────────────────
+
+class ScoreBreakdown(BaseModel):
+    score: float          # 0-100
+    label: str            # "Ruim" | "Regular" | "Bom" | "Excelente"
+    details: dict = Field(default_factory=dict)
+    suggestions: List[str] = Field(default_factory=list)
+
+
+class ListingAuditResult(BaseModel):
+    listing_id: str
+    marketplace: Marketplace
+    seo_score: ScoreBreakdown
+    conversion_score: ScoreBreakdown
+    competitiveness_score: ScoreBreakdown
+    overall_score: float
+    top_actions: List[str] = Field(default_factory=list)
+    generated_titles: List[str] = Field(default_factory=list)
+    generated_description: Optional[str] = None
+    audit_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class MarketResearchResult(BaseModel):
+    keyword: str
+    marketplace: Marketplace
+    total_collected: int
+    listings: List[ListingNormalized]
+    price_range: dict         # {min, max, avg, median}
+    top_seo_terms: List[dict] # [{term, freq}]
+    competitor_summary: dict
+    gaps: List[dict]
+    research_at: datetime = Field(default_factory=datetime.utcnow)

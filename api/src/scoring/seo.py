@@ -1,287 +1,302 @@
 """
-Motor de Scoring - SEO
-"""
+Motor de Scoring — SEO para Marketplaces.
 
-from typing import List, Dict, Any
-from api.src.types.listing import ListingNormalized
+Avalia um anúncio em 5 dimensões do SEO interno de marketplace:
+  1. Título (comprimento, keywords, formatação)
+  2. Atributos (completude)
+  3. Conteúdo textual (bullets, descrição)
+  4. Keywords (termos no título vs top concorrentes)
+  5. Regras por marketplace (limites, proibições)
+
+Score final: 0–100 → Ruim (<40) | Regular (40–64) | Bom (65–79) | Excelente (≥80)
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Optional
+import re
+
+from api.src.types.listing import ListingNormalized, Marketplace, ScoreBreakdown
+
+
+# ── Regras por Marketplace ─────────────────────────────────────
+
+MARKETPLACE_RULES = {
+    Marketplace.MERCADO_LIVRE: {
+        "title_max": 60,
+        "title_min": 40,
+        "title_recommended": 55,
+        "bullets_max": 6,
+        "bullets_ideal": 5,
+        "description_min_chars": 300,
+        "attributes_required": [
+            "cor", "material", "largura_cm", "profundidade_cm", "altura_cm",
+        ],
+        "forbidden_terms": [
+            "grátis", "promoção", "oferta", "melhor preço", "barato",
+            "frete grátis",  # não pode no título no ML
+            "!", "?", "$",
+        ],
+    },
+    Marketplace.MAGALU: {
+        "title_max": 100,
+        "title_min": 30,
+        "title_recommended": 70,
+        "bullets_max": 10,
+        "bullets_ideal": 6,
+        "description_min_chars": 200,
+        "attributes_required": ["cor", "material", "largura_cm", "altura_cm"],
+        "forbidden_terms": ["!", "?"],
+    },
+}
+
+DEFAULT_RULES = MARKETPLACE_RULES[Marketplace.MERCADO_LIVRE]
+
+
+@dataclass
+class SEOScoreResult:
+    score: float
+    label: str
+    breakdown: dict = field(default_factory=dict)
+    suggestions: list[str] = field(default_factory=list)
+
+    def to_schema(self) -> ScoreBreakdown:
+        return ScoreBreakdown(
+            score=self.score,
+            label=self.label,
+            details=self.breakdown,
+            suggestions=self.suggestions,
+        )
 
 
 class SEOScorer:
     """
-    Calcula score de SEO para anúncios.
-    
-    Critérios avaliados:
-    - Título: palavras-chave relevantes
-    - Comprimento do título
-    - Atributos preenchidos
-    - Imagens com boa qualidade
+    Calcula o score SEO de um anúncio.
+    Pode ser usado standalone ou passando lista de concorrentes
+    para comparar termos.
     """
-    
-    def __init__(self):
-        self.max_title_length = 60
-        self.min_keywords_in_title = 3
-        self.min_attributes = 3
-    
+
     def score(
         self,
         listing: ListingNormalized,
-        competitors: List[ListingNormalized]
-    ) -> Dict[str, Any]:
-        """
-        Calcular score de SEO.
-        
-        Args:
-            listing: Anúncio a ser avaliado
-            competitors: Lista de concorrentes para comparação
-            
-        Returns:
-            Dict com:
-                - score: float (0-100)
-                - factors: dict com fatores individuais
-                - suggestions: list de sugestões
-        """
-        
-        factors = {}
-        
-        # 1. Score do título
-        title_score = self._score_title(listing, competitors)
-        factors["title"] = title_score
-        
-        # 2. Score de palavras-chave
-        keywords_score = self._score_keywords(listing, competitors)
-        factors["keywords"] = keywords_score
-        
-        # 3. Score de atributos
-        attributes_score = self._score_attributes(listing)
-        factors["attributes"] = attributes_score
-        
-        # 4. Score de mídia
-        media_score = self._score_media(listing)
-        factors["media"] = media_score
-        
-        # Score final (média ponderada)
-        weights = {
-            "title": 0.30,
-            "keywords": 0.30,
-            "attributes": 0.25,
-            "media": 0.15
-        }
-        
-        final_score = sum(
-            factors[k]["score"] * weights[k]
-            for k in weights
+        competitors: Optional[list[ListingNormalized]] = None,
+    ) -> SEOScoreResult:
+        rules = MARKETPLACE_RULES.get(listing.marketplace, DEFAULT_RULES)
+        competitors = competitors or []
+
+        s_title, t_suggestions = self._score_title(listing, rules)
+        s_attrs, a_suggestions = self._score_attributes(listing, rules)
+        s_content, c_suggestions = self._score_content(listing, rules)
+        s_keywords, k_suggestions = self._score_keywords(listing, competitors)
+        s_rules, r_suggestions = self._score_rules_compliance(listing, rules)
+
+        # Pesos: título (35%) + atributos (20%) + conteúdo (15%) + keywords (20%) + compliance (10%)
+        total = (
+            s_title * 0.35
+            + s_attrs * 0.20
+            + s_content * 0.15
+            + s_keywords * 0.20
+            + s_rules * 0.10
         )
-        
-        # Gerar sugestões
-        suggestions = self._generate_suggestions(factors)
-        
-        return {
-            "score": round(final_score, 1),
-            "factors": factors,
-            "suggestions": suggestions,
-            "grade": self._get_grade(final_score)
-        }
-    
-    def _score_title(
-        self,
-        listing: ListingNormalized,
-        competitors: List[ListingNormalized]
-    ) -> Dict[str, Any]:
-        """Avaliar qualidade do título"""
-        
+        total = round(total, 1)
+
+        suggestions = t_suggestions + a_suggestions + c_suggestions + k_suggestions + r_suggestions
+
+        return SEOScoreResult(
+            score=total,
+            label=self._label(total),
+            breakdown={
+                "titulo": round(s_title, 1),
+                "atributos": round(s_attrs, 1),
+                "conteudo": round(s_content, 1),
+                "keywords": round(s_keywords, 1),
+                "compliance": round(s_rules, 1),
+            },
+            suggestions=suggestions[:8],  # top 8 ações
+        )
+
+    # ── Título ────────────────────────────────────────────────
+
+    def _score_title(self, listing: ListingNormalized, rules: dict) -> tuple[float, list[str]]:
         title = listing.title
         length = len(title)
-        
-        score = 0
-        feedback = []
-        
-        # Comprimento ideal (45-60 caracteres)
-        if 45 <= length <= 60:
-            score += 50
-        elif 35 <= length < 45 or 60 < length <= 65:
-            score += 30
-        elif length < 35:
-            score += 10
-            feedback.append("Título muito curto")
-        else:
-            score += 10
-            feedback.append("Título muito longo")
-        
-        # Verificar se tem termos relevantes
-        if competitors:
-            # Pegar top termos dos concorrentes
-            top_terms = []
-            for comp in competitors[:10]:
-                top_terms.extend(comp.seo_terms)
-            
-            # Contar termos do título que aparecem nos concorrentes
-            title_terms = set(listing.seo_terms)
-            matching = len(title_terms.intersection(set(top_terms)))
-            
-            if matching >= 3:
-                score += 50
-            elif matching >= 1:
-                score += 25
-            else:
-                feedback.append("Título sem palavras-chave relevantes")
-        else:
-            score += 25  # Sem concorrentes para comparar
-        
-        return {
-            "score": min(score, 100),
-            "length": length,
-            "feedback": feedback
-        }
-    
+        suggestions: list[str] = []
+        score = 100.0
+
+        max_len = rules["title_max"]
+        min_len = rules["title_min"]
+        recommended = rules["title_recommended"]
+
+        if length > max_len:
+            excess = length - max_len
+            score -= min(40, excess * 2)
+            suggestions.append(
+                f"Título longo ({length} chars) — corte para ≤ {max_len}. "
+                f"Remova termos redundantes no final."
+            )
+        elif length < min_len:
+            score -= 25
+            suggestions.append(
+                f"Título curto ({length} chars) — expanda para {min_len}–{recommended} chars "
+                f"incluindo marca, modelo e principal atributo."
+            )
+        elif length < recommended:
+            score -= 10
+            suggestions.append(
+                f"Título pode crescer mais ({length} chars). "
+                f"Ideal: {recommended} chars para melhor indexação."
+            )
+
+        # Primeira palavra deve ser substantivo/nome do produto (não artigo)
+        first_word = title.split()[0].lower() if title.split() else ""
+        if first_word in ("o", "a", "os", "as", "um", "uma"):
+            score -= 10
+            suggestions.append(
+                f'Título começa com artigo "{first_word}". '
+                "Inicie com o nome do produto (ex: 'Sofá Retrátil 3 Lugares')."
+            )
+
+        # Sem letras maiúsculas excessivas (ALL CAPS)
+        words = title.split()
+        all_caps = sum(1 for w in words if w.isupper() and len(w) > 2)
+        if all_caps > 2:
+            score -= 10
+            suggestions.append(
+                f"{all_caps} palavras em MAIÚSCULAS. Use Title Case — apenas primeira letra maiúscula."
+            )
+
+        return max(0.0, score), suggestions
+
+    # ── Atributos ─────────────────────────────────────────────
+
+    def _score_attributes(self, listing: ListingNormalized, rules: dict) -> tuple[float, list[str]]:
+        required = rules.get("attributes_required", [])
+        suggestions: list[str] = []
+        attrs = listing.attributes
+
+        missing = []
+        for attr in required:
+            val = getattr(attrs, attr, None)
+            if val is None:
+                missing.append(attr)
+
+        pct_missing = len(missing) / max(len(required), 1)
+        score = round((1 - pct_missing) * 100, 1)
+
+        if missing:
+            labels = {
+                "cor": "Cor",
+                "material": "Material",
+                "largura_cm": "Largura (cm)",
+                "profundidade_cm": "Profundidade (cm)",
+                "altura_cm": "Altura (cm)",
+                "peso_kg": "Peso (kg)",
+            }
+            missing_names = [labels.get(m, m) for m in missing]
+            suggestions.append(
+                f"Atributos obrigatórios ausentes: {', '.join(missing_names)}. "
+                "Preencha na ficha técnica do anúncio."
+            )
+
+        return max(0.0, score), suggestions
+
+    # ── Conteúdo textual ──────────────────────────────────────
+
+    def _score_content(self, listing: ListingNormalized, rules: dict) -> tuple[float, list[str]]:
+        suggestions: list[str] = []
+        score = 100.0
+
+        bullets = listing.text_blocks.bullets
+        descricao = listing.text_blocks.descricao or ""
+        ideal_bullets = rules.get("bullets_ideal", 5)
+        desc_min = rules.get("description_min_chars", 300)
+
+        if not bullets:
+            score -= 35
+            suggestions.append(
+                f"Sem bullets/tópicos. Adicione {ideal_bullets} tópicos destacando diferenciais "
+                "(ex: material, dimensões, garantia, uso)."
+            )
+        elif len(bullets) < ideal_bullets:
+            diff = ideal_bullets - len(bullets)
+            score -= diff * 7
+            suggestions.append(
+                f"Apenas {len(bullets)} bullet(s). Adicione mais {diff} para atingir {ideal_bullets}."
+            )
+
+        if not descricao:
+            score -= 30
+            suggestions.append(
+                "Sem descrição. Escreva pelo menos 300 chars com especificações técnicas, "
+                "uso, cuidados e benefícios do produto."
+            )
+        elif len(descricao) < desc_min:
+            score -= 15
+            suggestions.append(
+                f"Descrição curta ({len(descricao)} chars). "
+                f"Expanda para ao menos {desc_min} chars."
+            )
+
+        return max(0.0, score), suggestions
+
+    # ── Keywords vs concorrentes ───────────────────────────────
+
     def _score_keywords(
         self,
         listing: ListingNormalized,
-        competitors: List[ListingNormalized]
-    ) -> Dict[str, Any]:
-        """Avaliar relevância de palavras-chave"""
-        
-        keywords = listing.seo_terms
-        keyword_count = len(keywords)
-        
-        score = 0
-        feedback = []
-        
-        # Quantidade de keywords
-        if keyword_count >= 5:
-            score += 50
-        elif keyword_count >= 3:
-            score += 35
-        elif keyword_count >= 1:
-            score += 20
-        else:
-            score += 0
-            feedback.append("Nenhuma palavra-chave identificada")
-        
-        # Verificar se keywords estão no título
+        competitors: list[ListingNormalized],
+    ) -> tuple[float, list[str]]:
+        suggestions: list[str] = []
+
+        if not competitors:
+            return 70.0, []  # sem benchmark, score neutro
+
+        # Termos mais frequentes nos top concorrentes
+        from collections import Counter
+        all_terms: list[str] = []
+        for c in competitors[:20]:
+            all_terms.extend(c.seo_terms)
+        top_terms = {t for t, _ in Counter(all_terms).most_common(15)}
+
+        my_title_lower = listing.title.lower()
+        matched = sum(1 for t in top_terms if t in my_title_lower)
+        score = round(matched / max(len(top_terms), 1) * 100, 1)
+
+        missing_kw = [t for t in top_terms if t not in my_title_lower]
+        if missing_kw:
+            suggestions.append(
+                f"Termos frequentes nos concorrentes ausentes no seu título: "
+                f"{', '.join(list(missing_kw)[:5])}. Considere incluir os mais relevantes."
+            )
+
+        return min(100.0, score), suggestions
+
+    # ── Compliance (regras do marketplace) ────────────────────
+
+    def _score_rules_compliance(self, listing: ListingNormalized, rules: dict) -> tuple[float, list[str]]:
+        suggestions: list[str] = []
+        score = 100.0
+        forbidden = rules.get("forbidden_terms", [])
         title_lower = listing.title.lower()
-        keywords_in_title = sum(1 for kw in keywords if kw.lower() in title_lower)
-        
-        if keywords_in_title >= keyword_count * 0.7:
-            score += 50
-        elif keywords_in_title > 0:
-            score += 25
-            feedback.append("Algunas keywords fora do título")
-        else:
-            feedback.append("Keywords não encontradas no título")
-        
-        return {
-            "score": min(score, 100),
-            "keyword_count": keyword_count,
-            "keywords_in_title": keywords_in_title,
-            "feedback": feedback
-        }
-    
-    def _score_attributes(self, listing: ListingNormalized) -> Dict[str, Any]:
-        """Avaliar completude dos atributos"""
-        
-        attrs = listing.attributes
-        filled_attrs = []
-        
-        # Contar atributos preenchidos
-        fields = [
-            attrs.cor, attrs.material, attrs.tecido,
-            attrs.largura, attrs.profundidade, attrs.altura,
-            attrs.peso, attrs.tipo_sofa, attrs.numero_lugares
-        ]
-        
-        filled_count = sum(1 for f in fields if f is not None)
-        
-        score = min(filled_count * 15, 100)  # 7+ atributos = 100
-        
-        feedback = []
-        if filled_count < 3:
-            feedback.append("Poucos atributos preenchidos")
-        
-        # Sugerir atributos importantes para móveis
-        important = []
-        if not attrs.largura:
-            important.append("largura")
-        if not attrs.profundidade:
-            important.append("profundidade")
-        if not attrs.altura:
-            important.append("altura")
-        if not attrs.tecido:
-            important.append("tecido")
-        
-        if important:
-            feedback.append(f"Adicionar: {', '.join(important)}")
-        
-        return {
-            "score": score,
-            "filled_count": filled_count,
-            "total_fields": len(fields),
-            "feedback": feedback
-        }
-    
-    def _score_media(self, listing: ListingNormalized) -> Dict[str, Any]:
-        """Avaliar qualidade da mídia"""
-        
-        media = listing.media
-        image_count = len([m for m in media if m.tipo == "foto"])
-        
-        score = 0
-        feedback = []
-        
-        # Quantidade de imagens
-        if image_count >= 8:
-            score += 60
-        elif image_count >= 5:
-            score += 45
-        elif image_count >= 3:
-            score += 30
-        elif image_count >= 1:
-            score += 15
-        else:
-            feedback.append("Sem imagens")
-        
-        # Tem capa
-        has_capa = any(m.is_capa for m in media)
-        if has_capa:
-            score += 20
-        else:
-            feedback.append("Sem imagem de capa definida")
-        
-        # Tem vídeo
-        has_video = any(m.tipo == "video" for m in media)
-        if has_video:
-            score += 20
-        else:
-            feedback.append("Considere adicionar vídeo")
-        
-        return {
-            "score": min(score, 100),
-            "image_count": image_count,
-            "has_video": has_video,
-            "feedback": feedback
-        }
-    
-    def _generate_suggestions(self, factors: Dict) -> List[str]:
-        """Gerar lista de sugestões baseadas nos fatores"""
-        
-        suggestions = []
-        
-        for factor_name, factor_data in factors.items():
-            if factor_data["score"] < 60:
-                for feedback in factor_data.get("feedback", []):
-                    suggestions.append(f"[{factor_name.upper()}] {feedback}")
-        
-        return suggestions
-    
-    def _get_grade(self, score: float) -> str:
-        """Converter score em nota"""
-        
-        if score >= 90:
-            return "A"
-        elif score >= 80:
-            return "B"
-        elif score >= 70:
-            return "C"
-        elif score >= 60:
-            return "D"
-        else:
-            return "F"
+
+        found_forbidden = [f for f in forbidden if f in title_lower]
+        if found_forbidden:
+            score -= len(found_forbidden) * 20
+            suggestions.append(
+                f"Termos proibidos no título: {', '.join(found_forbidden)}. "
+                "Remova para evitar penalização ou remoção do anúncio."
+            )
+
+        return max(0.0, score), suggestions
+
+    # ── Label ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _label(score: float) -> str:
+        if score >= 80:
+            return "Excelente"
+        if score >= 65:
+            return "Bom"
+        if score >= 40:
+            return "Regular"
+        return "Ruim"

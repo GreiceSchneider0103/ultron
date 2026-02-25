@@ -1,31 +1,93 @@
-import os
+"""
+config.py — Configuração ÚNICA do projeto Ultron.
+COLOQUE EM: api/src/config.py
+
+APAGUE: api/src/orchestrator/config.py  (o duplicado)
+Todo import de config em qualquer módulo deve ser:
+    from src.config import settings
+"""
+from __future__ import annotations
+from functools import lru_cache
 from typing import Optional
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
-    # Database
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",          # ignora variáveis extras no .env sem errar
+    )
+
+    # ── Database local (SQLite — desenvolvimento) ──────────────
     DATABASE_URL: str = "sqlite:///./ultron.db"
-    
-    # Supabase
+
+    # ── Supabase (produção) ────────────────────────────────────
     SUPABASE_URL: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     DEFAULT_WORKSPACE_ID: str = "00000000-0000-0000-0000-000000000000"
-    
-    # Mercado Livre
+
+    # ── Mercado Livre ─────────────────────────────────────────
     ML_ACCESS_TOKEN: str = ""
-    
-    # Magalu (Sandbox / Operacional)
+    ML_CLIENT_ID: str = ""
+    ML_CLIENT_SECRET: str = ""
+
+    # ── Magalu ────────────────────────────────────────────────
     MAGALU_CLIENT_ID: str = ""
     MAGALU_CLIENT_SECRET: str = ""
     MAGALU_ACCESS_TOKEN: str = ""
-    MAGALU_CHANNEL_ID: str = "5f62650a-0039-4d65-9b96-266d498c03bd" # Sandbox Default
+    MAGALU_CHANNEL_ID: str = "5f62650a-0039-4d65-9b96-266d498c03bd"  # Sandbox default
     MAGALU_USE_SANDBOX: bool = True
     MAGALU_BASE_URL: str = "https://api.magalu.com"
     MAGALU_SANDBOX_BASE_URL: str = "https://api-sandbox.magalu.com"
-    
-    # System
+    MAGALU_SCRAPING_DELAY_MS: int = 1500   # delay para scraping (ms)
+
+    # ── IA / LLM ──────────────────────────────────────────────
+    OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+    DEFAULT_AI_PROVIDER: str = "openai"     # openai | anthropic
+    DEFAULT_AI_MODEL: str = "gpt-4o"
+
+    # ── Redis / Celery ────────────────────────────────────────
+    REDIS_URL: str = "redis://localhost:6379/0"
+
+    # ── App ───────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
+    ENVIRONMENT: str = "development"
+    CORS_ORIGINS: str = "http://localhost:3000"
 
-    model_config = SettingsConfigDict(env_file=".env")
+    # ── Propriedades derivadas ─────────────────────────────────
 
-settings = Settings()
+    @property
+    def magalu_api_url(self) -> str:
+        return self.MAGALU_SANDBOX_BASE_URL if self.MAGALU_USE_SANDBOX else self.MAGALU_BASE_URL
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",")]
+
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == "production"
+
+    def ai_configured(self) -> bool:
+        """True se ao menos um provider de IA está configurado."""
+        if self.DEFAULT_AI_PROVIDER == "anthropic":
+            return bool(self.ANTHROPIC_API_KEY)
+        return bool(self.OPENAI_API_KEY)
+
+    def ml_configured(self) -> bool:
+        return bool(self.ML_ACCESS_TOKEN or (self.ML_CLIENT_ID and self.ML_CLIENT_SECRET))
+
+    def magalu_configured(self) -> bool:
+        return bool(self.MAGALU_ACCESS_TOKEN or self.MAGALU_CLIENT_ID)
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+# Instância global para import direto: from src.config import settings
+settings = get_settings()
