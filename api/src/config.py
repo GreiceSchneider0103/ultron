@@ -7,14 +7,20 @@ Todo import de config em qualquer módulo deve usar o pacote `api.src`.
 """
 from __future__ import annotations
 from functools import lru_cache
+from pathlib import Path
 from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_API_DIR = Path(__file__).resolve().parents[1]
+_ROOT_DIR = _API_DIR.parent
+_API_ENV_FILE = _API_DIR / ".env"
+_ROOT_ENV_FILE = _ROOT_DIR / ".env"
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(str(_API_ENV_FILE), str(_ROOT_ENV_FILE)),
         env_file_encoding="utf-8",
         extra="ignore",          # ignora variáveis extras no .env sem errar
     )
