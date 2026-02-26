@@ -43,6 +43,8 @@ async def _call_llm(user_prompt: str) -> str:
     provider = settings.DEFAULT_AI_PROVIDER
     if provider == "anthropic":
         return await _anthropic(user_prompt)
+    if provider == "gemini":
+        return await _gemini(user_prompt)
     return await _openai(user_prompt)
 
 
@@ -73,6 +75,22 @@ async def _anthropic(prompt: str) -> str:
         temperature=0.4,
     )
     return msg.content[0].text if msg.content else "{}"
+
+
+async def _gemini(prompt: str) -> str:
+    import google.generativeai as genai
+
+    genai.configure(api_key=settings.GEMINI_API_KEY)
+    model_name = settings.DEFAULT_AI_MODEL or "gemini-1.5-flash"
+    if model_name.startswith(("gpt-", "claude")):
+        model_name = "gemini-1.5-flash"
+    model = genai.GenerativeModel(model_name=model_name)
+    response = await model.generate_content_async(
+        [SYSTEM_SEO, prompt],
+        generation_config={"temperature": 0.4},
+    )
+    text = getattr(response, "text", None)
+    return text or "{}"
 
 
 def _parse(raw: str) -> dict:

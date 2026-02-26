@@ -1,9 +1,9 @@
-"""
-config.py — Configuração ÚNICA do projeto Ultron.
+﻿"""
+config.py â€” ConfiguraÃ§Ã£o ÃšNICA do projeto Ultron.
 COLOQUE EM: api/src/config.py
 
 APAGUE: api/src/orchestrator/config.py  (o duplicado)
-Todo import de config em qualquer módulo deve usar o pacote `api.src`.
+Todo import de config em qualquer mÃ³dulo deve usar o pacote `api.src`.
 """
 from __future__ import annotations
 from functools import lru_cache
@@ -22,24 +22,24 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(str(_API_ENV_FILE), str(_ROOT_ENV_FILE)),
         env_file_encoding="utf-8",
-        extra="ignore",          # ignora variáveis extras no .env sem errar
+        extra="ignore",          # ignora variÃ¡veis extras no .env sem errar
     )
 
-    # ── Database local (SQLite — desenvolvimento) ──────────────
+    # â”€â”€ Database local (SQLite â€” desenvolvimento) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     DATABASE_URL: str = "sqlite:///./ultron.db"
 
-    # ── Supabase (produção) ────────────────────────────────────
+    # â”€â”€ Supabase (produÃ§Ã£o) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     SUPABASE_URL: Optional[str] = None
     SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     DEFAULT_WORKSPACE_ID: str = "00000000-0000-0000-0000-000000000000"
 
-    # ── Mercado Livre ─────────────────────────────────────────
+    # â”€â”€ Mercado Livre â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     ML_ACCESS_TOKEN: str = ""
     ML_CLIENT_ID: str = ""
     ML_CLIENT_SECRET: str = ""
 
-    # ── Magalu ────────────────────────────────────────────────
+    # â”€â”€ Magalu â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     MAGALU_CLIENT_ID: str = ""
     MAGALU_CLIENT_SECRET: str = ""
     MAGALU_ACCESS_TOKEN: str = ""
@@ -49,21 +49,22 @@ class Settings(BaseSettings):
     MAGALU_SANDBOX_BASE_URL: str = "https://api-sandbox.magalu.com"
     MAGALU_SCRAPING_DELAY_MS: int = 1500   # delay para scraping (ms)
 
-    # ── IA / LLM ──────────────────────────────────────────────
+    # â”€â”€ IA / LLM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
-    DEFAULT_AI_PROVIDER: str = "openai"     # openai | anthropic
+    GEMINI_API_KEY: str = ""
+    DEFAULT_AI_PROVIDER: str = "openai"     # openai | anthropic | gemini
     DEFAULT_AI_MODEL: str = "gpt-4o"
 
-    # ── Redis / Celery ────────────────────────────────────────
+    # â”€â”€ Redis / Celery â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # ── App ───────────────────────────────────────────────────
+    # â”€â”€ App â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
     CORS_ORIGINS: str = "http://localhost:3000"
 
-    # ── Propriedades derivadas ─────────────────────────────────
+    # â”€â”€ Propriedades derivadas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     @property
     def magalu_api_url(self) -> str:
@@ -100,9 +101,11 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT == "production"
 
     def ai_configured(self) -> bool:
-        """True se ao menos um provider de IA está configurado."""
+        """True se ao menos um provider de IA estÃ¡ configurado."""
         if self.DEFAULT_AI_PROVIDER == "anthropic":
             return bool(self.ANTHROPIC_API_KEY)
+        if self.DEFAULT_AI_PROVIDER == "gemini":
+            return bool(self.GEMINI_API_KEY)
         return bool(self.OPENAI_API_KEY)
 
     def check_ai_configured(self) -> bool:
@@ -125,5 +128,7 @@ def get_settings() -> Settings:
     return Settings()
 
 
-# Instância global para import direto
+# InstÃ¢ncia global para import direto
 settings = get_settings()
+
+
