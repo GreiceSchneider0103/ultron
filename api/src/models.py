@@ -1,5 +1,7 @@
+"""Legacy compatibility models module.
+
+The project no longer keeps SQLAlchemy models in `api.src.db.models`.
+Use Pydantic contracts from `api.src.types.listing` instead.
 """
-Shim module to support:
-from api.src.db.models import ...
-"""
-from api.src.db.models import *  # noqa
+
+from api.src.types.listing import *  # noqa: F401,F403
