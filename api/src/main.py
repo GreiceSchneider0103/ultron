@@ -16,9 +16,13 @@ from api.src.config import get_settings, settings
 from api.src.connectors.base import BaseConnector
 from api.src.connectors.magalu import MagaluConnector
 from api.src.connectors.mercado_livre import MercadoLivreConnector
+from api.src.contracts import validate_against_contract
 from api.src.db import repository
+from api.src.functions import function_calls
 from api.src.functions.generator import generate_bullets, generate_description, generate_titles
 from api.src.orchestrator.agent import MarketAgent
+from api.src.reports import generate_action_plan, generate_audit_report, generate_market_dashboard
+from api.src.strategy.margin_strategy import decide_margin_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +46,10 @@ def _not_implemented(module: str, endpoint: str, message: str = "This endpoint i
             "message": message,
         },
     )
+
+
+def _not_implemented_from_stub(stub: dict[str, Any]) -> JSONResponse:
+    return JSONResponse(status_code=501, content=stub)
 
 
 @asynccontextmanager
@@ -164,14 +172,19 @@ async def market_search(
     offset: int = Query(default=0, ge=0),
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    connector = get_connector(marketplace)
-    listings = await connector.search_and_normalize(query=query, category_id=category, limit=limit, offset=offset)
+    listings = await function_calls.search_listings(
+        query=query,
+        marketplace=marketplace,
+        category=category,
+        limit=limit,
+        offset=offset,
+    )
     return {
         "workspace_id": ctx.workspace_id,
         "marketplace": _marketplace_alias(marketplace),
         "query": query,
         "count": len(listings),
-        "items": [item.model_dump() if hasattr(item, "model_dump") else item for item in listings],
+        "items": listings,
     }
 
 
@@ -181,11 +194,9 @@ async def market_product_details(
     marketplace: str,
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    connector = get_connector(marketplace)
-    raw = await connector.get_listing_details(product_id)
-    normalized = await connector.normalize(raw)
-    normalized_data = normalized.model_dump() if hasattr(normalized, "model_dump") else normalized
-    return {"workspace_id": ctx.workspace_id, "raw": raw, "normalized": normalized_data}
+    normalized_data = await function_calls.get_listing_detail(marketplace=marketplace, listing_id=product_id)
+    valid, err = validate_against_contract(normalized_data, "listing_normalized.schema.json")
+    return {"workspace_id": ctx.workspace_id, "normalized": normalized_data, "contract_valid": valid, "contract_error": err}
 
 
 @market_research_router.post("/competitor-pricing")
@@ -222,7 +233,8 @@ async def market_trends(
     period: str = "30d",
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    return _not_implemented("market-research", "/api/market-research/trends")
+    stub = function_calls.get_trends(query=category, region="BR", timeframe=period)
+    return _not_implemented_from_stub(stub)
 
 
 @market_research_router.post("/analyze")
@@ -236,7 +248,23 @@ async def market_analyze(
         marketplace=_marketplace_alias(req.marketplace),
         limit=req.limit,
     )
-    return result.model_dump()
+    normalized = [item.to_contract_payload() for item in result.listings]
+    dashboard = generate_market_dashboard(
+        normalized_listings=normalized,
+        clusters={},
+        metrics={
+            "price_range": result.price_range,
+            "competitor_summary": result.competitor_summary,
+            "gaps": result.gaps,
+        },
+    )
+    valid, err = validate_against_contract(dashboard, "report_outputs.schema.json")
+    return {
+        "research": result.model_dump(),
+        "dashboard": dashboard,
+        "contract_valid": valid,
+        "contract_error": err,
+    }
 
 
 @seo_router.get("/keywords")
@@ -280,7 +308,12 @@ async def seo_analyze_listing(
             recommendations=result.model_dump().get("top_actions", []),
             supabase_jwt=ctx.token,
         )
-    return result.model_dump()
+    audit_payload = generate_audit_report(
+        my_listing={"scores": {"seo": result.seo_score.score, "conversion": result.conversion_score.score, "competitiveness": result.competitiveness_score.score}},
+        top_competitors=[],
+        ruleset={"version": 1},
+    )
+    return {"audit": result.model_dump(), "report": audit_payload}
 
 
 @seo_router.post("/optimize-title")
@@ -303,7 +336,8 @@ async def seo_ranking(
     keyword: str,
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    return _not_implemented("seo", "/api/seo/ranking")
+    stub = function_calls.get_my_listing_performance(listing_id=product_id, metrics=["rank"], timeframe="7d")
+    return _not_implemented_from_stub(stub)
 
 
 @seo_router.post("/competitor-keywords")
@@ -386,21 +420,32 @@ async def documents_extract(
     extract_type: Optional[str] = None,
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    return _not_implemented("documents", f"/api/documents/{document_id}/extract")
+    stub = function_calls.read_pdf(file_id=document_id)
+    return _not_implemented_from_stub(stub) if stub.get("status") == "not_implemented" else stub
 
 
 @documents_router.post("/analyze")
 async def documents_analyze(req: Dict[str, Any], ctx: RequestContext = Depends(require_auth_context)):
-    return _not_implemented("documents", "/api/documents/analyze")
+    stub = function_calls.extract_product_specs(document_text=req.get("text", ""))
+    return _not_implemented_from_stub(stub) if stub.get("status") == "not_implemented" else stub
 
 
 @reports_router.post("/generate")
 async def reports_generate(req: Dict[str, Any], ctx: RequestContext = Depends(require_auth_context)):
+    strategy = decide_margin_strategy(
+        cost=float(req.get("cost", 0)),
+        min_margin_pct=float(req.get("min_margin_pct", 20)),
+        shipping_cost=float(req.get("shipping_cost", 0)),
+        commission_pct=float(req.get("commission_pct", 0)),
+        lead_time_days=int(req.get("lead_time_days", 5)),
+        target_price=float(req.get("target_price", 0)),
+    )
+    action_plan = generate_action_plan(findings=req.get("findings", {}), constraints={"strategy": strategy})
     job_id = repository.create_job(
         workspace_id=ctx.workspace_id,
         job_type="report_generate",
         status="pending",
-        result_summary={"request": req},
+        result_summary={"request": req, "strategy": strategy, "action_plan": action_plan},
         supabase_jwt=ctx.token,
     )
     return {"workspace_id": ctx.workspace_id, "report_id": job_id, "status": "pending"}

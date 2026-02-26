@@ -7,7 +7,7 @@ from typing import Optional, List
 from enum import Enum
 from datetime import datetime
 
-from pydantic import BaseModel, Field, HttpUrl, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ── Enumerações ───────────────────────────────────────────────
@@ -64,20 +64,52 @@ class SellerMetrics(BaseModel):
 
 
 class Seller(BaseModel):
-    seller_id: str
-    nome: str
-    reputacao: SellerReputation = SellerReputation.UNKNOWN
-    tempo_mercado_meses: Optional[int] = None
-    metricas: Optional[SellerMetrics] = None
+    model_config = ConfigDict(populate_by_name=True)
+
+    seller_id: Optional[str] = None
+    name: str = Field(default="", alias="nome")
+    reputation: SellerReputation = Field(default=SellerReputation.UNKNOWN, alias="reputacao")
+    years_active: Optional[int] = Field(default=None, alias="tempo_mercado_meses")
+    metrics: Optional[SellerMetrics] = Field(default=None, alias="metricas")
     is_official_store: bool = False
+
+    @property
+    def nome(self) -> str:
+        return self.name
+
+    @property
+    def reputacao(self) -> SellerReputation:
+        return self.reputation
+
+    @property
+    def tempo_mercado_meses(self) -> Optional[int]:
+        return self.years_active
+
+    @property
+    def metricas(self) -> Optional[SellerMetrics]:
+        return self.metrics
 
 
 class SocialProof(BaseModel):
-    avaliacoes_total: int = 0
-    nota_media: float = 0.0
-    perguntas_total: int = 0
+    model_config = ConfigDict(populate_by_name=True)
+
+    reviews_count: int = Field(default=0, alias="avaliacoes_total")
+    rating: float = Field(default=0.0, alias="nota_media")
+    qa_count: int = Field(default=0, alias="perguntas_total")
     respostas_total: int = 0
     vendas_estimadas: Optional[int] = None   # quando disponível
+
+    @property
+    def avaliacoes_total(self) -> int:
+        return self.reviews_count
+
+    @property
+    def nota_media(self) -> float:
+        return self.rating
+
+    @property
+    def perguntas_total(self) -> int:
+        return self.qa_count
 
 
 class Badges(BaseModel):
@@ -92,8 +124,20 @@ class Badges(BaseModel):
 
 class TextBlocks(BaseModel):
     bullets: List[str] = Field(default_factory=list)
-    descricao: Optional[str] = None
+    description: Optional[str] = Field(default=None, alias="descricao")
     faq: List[dict] = Field(default_factory=list)   # [{pergunta, resposta}]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    @property
+    def descricao(self) -> Optional[str]:
+        return self.description
+
+
+class ListingSignals(BaseModel):
+    sponsored: Optional[bool] = None
+    stock_signal: Optional[str] = None
+    ranking_signal: Optional[str] = None
 
 
 # ── Schema principal ──────────────────────────────────────────
@@ -111,10 +155,11 @@ class ListingNormalized(BaseModel):
     # Preços
     price: float                          # preço atual
     price_original: Optional[float] = None  # preço sem desconto
-    shipping_cost: float = 0.0
+    shipping_cost: Optional[float] = 0.0
     final_price_estimate: float           # price + shipping_cost
     installments_max: Optional[int] = None
     installments_value: Optional[float] = None
+    condition: str = "new"
 
     # Categorização
     category_path: List[str] = Field(default_factory=list)   # ["Móveis", "Sofás"]
@@ -140,6 +185,8 @@ class ListingNormalized(BaseModel):
 
     # SEO
     seo_terms: List[str] = Field(default_factory=list)   # termos extraídos do título+desc
+    signals: ListingSignals = Field(default_factory=ListingSignals)
+    normalized_type: Optional[str] = None
 
     # Metadados de coleta
     scraped_at: datetime = Field(default_factory=datetime.utcnow)
@@ -149,7 +196,8 @@ class ListingNormalized(BaseModel):
     @classmethod
     def set_final_price(cls, v, info):
         if v is None and info.data:
-            return info.data.get("price", 0) + info.data.get("shipping_cost", 0)
+            shipping = info.data.get("shipping_cost", 0) or 0
+            return info.data.get("price", 0) + shipping
         return v
 
     @field_validator("media_count", mode="before")
@@ -158,6 +206,78 @@ class ListingNormalized(BaseModel):
         if v == 0 and info.data and info.data.get("media"):
             return len(info.data["media"])
         return v
+
+    def to_contract_payload(self) -> dict:
+        badges_list: list[str] = []
+        if self.badges.frete_gratis:
+            badges_list.append("frete_gratis")
+        if self.badges.full:
+            badges_list.append("full")
+        if self.badges.premium:
+            badges_list.append("premium")
+        if self.badges.oficial:
+            badges_list.append("oficial")
+        if self.badges.melhorei_preco:
+            badges_list.append("melhorei_preco")
+        if self.badges.anuncio_patrocinado:
+            badges_list.append("anuncio_patrocinado")
+        if self.badges.parcelamento_sem_juros:
+            badges_list.append("parcelamento_sem_juros")
+
+        media_urls = [m.url for m in self.media if m.url]
+        media_types = []
+        for m in self.media:
+            if m.tipo == MediaType.PHOTO:
+                media_types.append("image")
+            elif m.tipo == MediaType.VIDEO:
+                media_types.append("video")
+            else:
+                media_types.append("other")
+
+        return {
+            "marketplace": self.marketplace.value if hasattr(self.marketplace, "value") else str(self.marketplace),
+            "listing_id": self.listing_id,
+            "url": self.url,
+            "title": self.title,
+            "price": self.price,
+            "shipping_cost": self.shipping_cost,
+            "final_price_estimate": self.final_price_estimate,
+            "condition": self.condition,
+            "category_path": self.category_path,
+            "attributes": {
+                "cor": self.attributes.cor,
+                "material": self.attributes.material,
+                "largura_cm": self.attributes.largura_cm,
+                "profundidade_cm": self.attributes.profundidade_cm,
+                "altura_cm": self.attributes.altura_cm,
+                "peso_kg": self.attributes.peso_kg,
+                "densidade": self.attributes.densidade,
+            },
+            "media": {
+                "cover_url": media_urls[0] if media_urls else None,
+                "urls": media_urls,
+                "types": media_types,
+            },
+            "seller": {
+                "seller_id": self.seller.seller_id,
+                "reputation": self.seller.reputation.value if hasattr(self.seller.reputation, "value") else self.seller.reputation,
+                "years_active": self.seller.years_active,
+                "metrics": self.seller.metrics.model_dump(exclude_none=True) if self.seller.metrics else {},
+            },
+            "social_proof": {
+                "reviews_count": self.social_proof.reviews_count,
+                "rating": self.social_proof.rating,
+                "qa_count": self.social_proof.qa_count,
+            },
+            "badges": badges_list,
+            "text_blocks": {
+                "bullets": self.text_blocks.bullets,
+                "description": self.text_blocks.description,
+            },
+            "seo_terms": self.seo_terms,
+            "signals": self.signals.model_dump(exclude_none=False),
+            "normalized_type": self.normalized_type,
+        }
 
 
 # ── Schemas de scoring (saídas) ───────────────────────────────

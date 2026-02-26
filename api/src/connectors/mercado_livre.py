@@ -18,6 +18,7 @@ import structlog
 
 from api.src.config import get_settings
 from api.src.connectors.base import BaseConnector
+from api.src.utils.measurements import parse_length_to_cm
 from api.src.types.listing import (
     Badges, ListingAttributes, ListingNormalized, Marketplace,
     MediaItem, MediaType, Seller, SellerMetrics, SellerReputation,
@@ -216,7 +217,10 @@ class MercadoLivreConnector(BaseConnector):
     @staticmethod
     def _to_cm(value_name: str, struct: dict) -> Optional[float]:
         try:
-            num = float(struct.get("number", value_name.split()[0]))
+            raw_number = struct.get("number")
+            if raw_number is None:
+                return parse_length_to_cm(value_name)
+            num = float(str(raw_number).replace(",", "."))
             unit = struct.get("unit", "cm").lower()
             if unit == "mm":
                 return num / 10
@@ -224,7 +228,7 @@ class MercadoLivreConnector(BaseConnector):
                 return num * 100
             return num
         except (ValueError, TypeError):
-            return None
+            return parse_length_to_cm(value_name)
 
     @staticmethod
     def _to_kg(value_name: str, struct: dict) -> Optional[float]:

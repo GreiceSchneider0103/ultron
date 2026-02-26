@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultron.local/contracts/report_outputs.schema.json",
+  "title": "UltronReportOutputs",
+  "type": "object",
+  "properties": {
+    "market_dashboard": { "$ref": "#/$defs/market_dashboard" },
+    "audit_report": { "$ref": "#/$defs/audit_report" },
+    "action_plan": { "$ref": "#/$defs/action_plan" },
+    "ab_test_plan": { "$ref": "#/$defs/ab_test_plan" },
+    "alerts": { "$ref": "#/$defs/alerts" },
+    "status_stub": { "$ref": "#/$defs/status_stub" }
+  },
+  "$defs": {
+    "status_stub": {
+      "type": "object",
+      "required": ["status", "reason", "todo"],
+      "properties": {
+        "status": { "type": "string", "enum": ["not_implemented"] },
+        "reason": { "type": "string" },
+        "todo": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "market_dashboard": {
+      "type": "object",
+      "required": ["price_range", "competitor_summary", "attribute_map", "gaps"],
+      "properties": {
+        "price_range": { "type": "object" },
+        "competitor_summary": { "type": "object" },
+        "attribute_map": { "type": "object" },
+        "gaps": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "audit_report": {
+      "type": "object",
+      "required": ["scores", "weak_points", "recommendations"],
+      "properties": {
+        "scores": { "type": "object" },
+        "weak_points": { "type": "array", "items": { "type": "string" } },
+        "recommendations": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "action_plan": {
+      "type": "object",
+      "required": ["top_10_actions"],
+      "properties": {
+        "top_10_actions": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "ab_test_plan": {
+      "type": "object",
+      "required": ["tests"],
+      "properties": {
+        "tests": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "alerts": {
+      "type": "object",
+      "required": ["rules", "events"],
+      "properties": {
+        "rules": { "type": "array", "items": { "type": "object" } },
+        "events": { "type": "array", "items": { "type": "object" } }
+      }
+    }
+  }
+}

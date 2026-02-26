@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ultron.local/contracts/listing_normalized.schema.json",
+  "title": "ListingNormalized",
+  "type": "object",
+  "required": [
+    "marketplace",
+    "listing_id",
+    "title",
+    "price",
+    "final_price_estimate",
+    "condition",
+    "category_path",
+    "attributes",
+    "media",
+    "seller",
+    "social_proof",
+    "badges",
+    "text_blocks",
+    "seo_terms",
+    "signals"
+  ],
+  "properties": {
+    "marketplace": { "type": "string" },
+    "listing_id": { "type": "string" },
+    "url": { "type": ["string", "null"] },
+    "title": { "type": "string" },
+    "price": { "type": "number" },
+    "shipping_cost": { "type": ["number", "null"] },
+    "final_price_estimate": { "type": "number" },
+    "condition": { "type": "string" },
+    "category_path": { "type": "array", "items": { "type": "string" } },
+    "attributes": {
+      "type": "object",
+      "required": ["cor", "material", "largura_cm", "profundidade_cm", "altura_cm", "peso_kg", "densidade"],
+      "properties": {
+        "cor": { "type": ["string", "null"] },
+        "material": { "type": ["string", "null"] },
+        "largura_cm": { "type": ["number", "null"] },
+        "profundidade_cm": { "type": ["number", "null"] },
+        "altura_cm": { "type": ["number", "null"] },
+        "peso_kg": { "type": ["number", "null"] },
+        "densidade": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "media": {
+      "type": "object",
+      "required": ["cover_url", "urls", "types"],
+      "properties": {
+        "cover_url": { "type": ["string", "null"] },
+        "urls": { "type": "array", "items": { "type": "string" } },
+        "types": { "type": "array", "items": { "type": "string", "enum": ["image", "video", "other"] } }
+      }
+    },
+    "seller": {
+      "type": "object",
+      "required": ["seller_id", "reputation", "years_active", "metrics"],
+      "properties": {
+        "seller_id": { "type": ["string", "null"] },
+        "reputation": { "type": ["string", "null"] },
+        "years_active": { "type": ["number", "null"] },
+        "metrics": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "social_proof": {
+      "type": "object",
+      "required": ["reviews_count", "rating", "qa_count"],
+      "properties": {
+        "reviews_count": { "type": ["number", "null"] },
+        "rating": { "type": ["number", "null"] },
+        "qa_count": { "type": ["number", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "badges": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "text_blocks": {
+      "type": "object",
+      "required": ["bullets", "description"],
+      "properties": {
+        "bullets": { "type": "array", "items": { "type": "string" } },
+        "description": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "seo_terms": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "signals": {
+      "type": "object",
+      "required": ["sponsored", "stock_signal", "ranking_signal"],
+      "properties": {
+        "sponsored": { "type": ["boolean", "null"] },
+        "stock_signal": { "type": ["string", "null"] },
+        "ranking_signal": { "type": ["string", "null"] }
+      },
+      "additionalProperties": true
+    },
+    "normalized_type": { "type": ["string", "null"] }
+  },
+  "additionalProperties": true
+}

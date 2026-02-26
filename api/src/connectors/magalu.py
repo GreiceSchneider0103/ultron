@@ -17,6 +17,7 @@ import structlog
 
 from api.src.config import get_settings
 from api.src.connectors.base import BaseConnector
+from api.src.utils.measurements import parse_length_to_cm
 from api.src.types.listing import (
     Badges, ListingAttributes, ListingNormalized, Marketplace,
     MediaItem, MediaType, Seller, SellerReputation,
@@ -232,12 +233,7 @@ class MagaluConnector(BaseConnector):
 
     @staticmethod
     def _parse_float(val: Any) -> Optional[float]:
-        if val is None:
-            return None
-        try:
-            return float(str(val).replace(",", ".").split()[0])
-        except (ValueError, TypeError):
-            return None
+        return parse_length_to_cm(val)
 
     def _extract_badges(self, raw: dict) -> Badges:
         return Badges(

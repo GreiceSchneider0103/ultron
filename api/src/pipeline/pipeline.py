@@ -31,14 +31,25 @@ log = structlog.get_logger()
 
 class Deduplicator:
     @staticmethod
+    def _title_key(title: str) -> str:
+        return " ".join((title or "").lower().replace("-", " ").split())
+
+    @staticmethod
     def run(listings: list[ListingNormalized]) -> list[ListingNormalized]:
         seen: set[str] = set()
+        seen_title_keys: set[str] = set()
         unique: list[ListingNormalized] = []
         for item in listings:
             key = f"{item.marketplace.value}:{item.listing_id}"
-            if key not in seen:
-                seen.add(key)
-                unique.append(item)
+            title_key = Deduplicator._title_key(item.title)
+            if key in seen:
+                continue
+            if title_key and title_key in seen_title_keys:
+                continue
+            seen.add(key)
+            if title_key:
+                seen_title_keys.add(title_key)
+            unique.append(item)
         removed = len(listings) - len(unique)
         if removed:
             log.info("dedup_removed", count=removed)

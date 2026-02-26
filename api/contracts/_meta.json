@@ -1,0 +1,8 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-02-26",
+  "changelog": [
+    "Initial contract pack for ListingNormalized and report outputs.",
+    "Adds stable schemas for MVP function-calling payloads."
+  ]
+}
