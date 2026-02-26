@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import httpx
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 
 from api.src.auth import RequestContext, require_auth_context
+from api.src.config import settings
 from api.src.contracts.validator import validate_against_contract
 from api.src.db import repository
 from api.src.functions import function_calls
@@ -12,6 +15,7 @@ from api.src.orchestrator.agent import MarketAgent
 from api.src.reports.market_dashboard import generate_market_dashboard
 from api.src.routers.common import not_implemented
 from api.src.routers.schemas import AnalyzeRequest, CompetitorPricingRequest
+from api.src.services.alert_checker import check_and_fire_alerts
 from api.src.services.marketplace import get_agent, get_connector, marketplace_alias
 
 router = APIRouter(prefix="/api/market-research", tags=["market-research"])
@@ -96,6 +100,44 @@ async def market_trends(
     return not_implemented("market-research", "/api/market-research/trends")
 
 
+@router.get("/my-listings")
+async def my_listings(
+    marketplace: str,
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    mp = marketplace_alias(marketplace)
+    if mp != "mercado_livre":
+        return {"workspace_id": ctx.workspace_id, "items": [], "count": 0}
+
+    if not settings.ML_ACCESS_TOKEN:
+        return JSONResponse(
+            status_code=422,
+            content={"error": "token_required", "message": "ML_ACCESS_TOKEN not configured."},
+        )
+
+    headers = {"Authorization": f"Bearer {settings.ML_ACCESS_TOKEN}"}
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        me_items = await client.get(
+            "https://api.mercadolibre.com/users/me/items/search",
+            params={"limit": limit, "offset": offset},
+            headers=headers,
+        )
+        me_items.raise_for_status()
+        data = me_items.json()
+        item_ids = data.get("results", [])
+
+    listings: list[dict] = []
+    for listing_id in item_ids:
+        try:
+            normalized = await function_calls.get_listing_detail("mercadolivre", listing_id)
+            listings.append(normalized)
+        except Exception:
+            continue
+    return {"workspace_id": ctx.workspace_id, "items": listings, "count": len(listings)}
+
+
 @router.post("/analyze")
 async def market_analyze(
     req: AnalyzeRequest,
@@ -150,7 +192,12 @@ async def operations_sync_impl(
                 supabase_jwt=ctx.token,
             )
             if listing_uuid:
-                repository.insert_snapshot_if_changed(
+                previous_snapshot = repository.get_latest_snapshot(
+                    workspace_id=ctx.workspace_id,
+                    listing_uuid=listing_uuid,
+                    supabase_jwt=ctx.token,
+                )
+                snapshot_changed = repository.insert_snapshot_if_changed(
                     workspace_id=ctx.workspace_id,
                     listing_uuid=listing_uuid,
                     raw_data=raw,
@@ -158,6 +205,15 @@ async def operations_sync_impl(
                     derived_data={"source": "operations_sync"},
                     supabase_jwt=ctx.token,
                 )
+                if snapshot_changed and previous_snapshot:
+                    previous_data = previous_snapshot.get("normalized_data") or {}
+                    await check_and_fire_alerts(
+                        workspace_id=ctx.workspace_id,
+                        listing_uuid=listing_uuid,
+                        current_data=normalized_data,
+                        previous_data=previous_data,
+                        supabase_jwt=ctx.token,
+                    )
                 results["synced"] += 1
             else:
                 results["failed"] += 1

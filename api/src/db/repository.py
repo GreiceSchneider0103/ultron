@@ -164,6 +164,30 @@ def insert_snapshot_if_changed(
         return False
 
 
+def get_latest_snapshot(
+    workspace_id: str,
+    listing_uuid: str,
+    supabase_jwt: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    client = _make_client(supabase_jwt=supabase_jwt)
+    if not client:
+        return None
+    try:
+        resp = (
+            client.table("listing_snapshots")
+            .select("*")
+            .eq("workspace_id", workspace_id)
+            .eq("listing_id", listing_uuid)
+            .order("captured_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        return (resp.data or [None])[0]
+    except Exception as exc:
+        logger.error("repository_get_latest_snapshot_failed", error=str(exc))
+        return None
+
+
 def insert_audit(
     workspace_id: str,
     listing_id: str,
@@ -301,6 +325,29 @@ def list_alert_rules(workspace_id: str, supabase_jwt: Optional[str] = None) -> L
         return []
 
 
+def list_active_alert_rules_for_listing(
+    workspace_id: str,
+    listing_id: str,
+    supabase_jwt: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    client = _make_client(supabase_jwt=supabase_jwt)
+    if not client:
+        return []
+    try:
+        resp = (
+            client.table("alert_rules")
+            .select("*")
+            .eq("workspace_id", workspace_id)
+            .eq("is_active", True)
+            .or_(f"listing_id.eq.{listing_id},listing_id.is.null")
+            .execute()
+        )
+        return resp.data or []
+    except Exception as exc:
+        logger.error("repository_list_active_alert_rules_for_listing_failed", error=str(exc))
+        return []
+
+
 def update_alert_rule(
     workspace_id: str,
     alert_id: str,
@@ -340,6 +387,33 @@ def list_alert_events(workspace_id: str, supabase_jwt: Optional[str] = None) -> 
     except Exception as exc:
         logger.error("repository_list_alert_events_failed", error=str(exc))
         return []
+
+
+def create_alert_event(
+    workspace_id: str,
+    rule_id: str,
+    listing_id: str,
+    event_data: Dict[str, Any],
+    status: str = "triggered",
+    supabase_jwt: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    client = _make_client(supabase_jwt=supabase_jwt)
+    if not client:
+        return None
+    payload = {
+        "rule_id": rule_id,
+        "workspace_id": workspace_id,
+        "listing_id": listing_id,
+        "status": status,
+        "event_data": event_data or {},
+    }
+    try:
+        resp = client.table("alert_events").insert(payload).execute()
+        data = resp.data or []
+        return data[0] if data else None
+    except Exception as exc:
+        logger.error("repository_create_alert_event_failed", error=str(exc))
+        return None
 
 
 def create_market_research_audit(summary: Any, listings: Any) -> Dict[str, Any]:
