@@ -12,6 +12,7 @@ api/venv/
 .env
 .env.*
 api/.env
+!api/.env.example
 
 # Logs / cache / data
 *.log

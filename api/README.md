@@ -1,56 +1,51 @@
 # ULTRON API
 
-API do sistema de inteligência para marketplaces.
+API FastAPI para Market Research, SEO, Ads, Documents, Reports e Alerts.
 
-## Setup
+## Start (unico)
 
 ```bash
-# Criar ambiente virtual
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate  # Windows
-
-# Instalar dependências
-pip install -r requirements.txt
-
-# Copiar variáveis de ambiente
-cp .env.example .env
-
-# Executar
-uvicorn src.main:app --reload
+uvicorn api.src.main:app --reload
 ```
 
-## Variáveis de Ambiente (.env)
+## Setup rapido
 
-```env
-# Supabase
-SUPABASE_URL=sua_url_supabase
-SUPABASE_KEY=sua_chave_supabase
-
-# Mercado Livre
-ML_CLIENT_ID=seu_client_id
-ML_CLIENT_SECRET=seu_client_secret
-
-# Magalu
-MAGALU_CLIENT_ID=seu_client_id
-MAGALU_CLIENT_SECRET=seu_client_secret
-
-# Redis (para Celery)
-REDIS_URL=redis://localhost:6379/0
-
-# BigQuery (opcional)
-GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r api/requirements.txt
+copy api\.env.example .env
 ```
 
-## Endpoints
+## Auth e Workspace
 
-- `GET /health` - Health check
-- `POST /search` - Buscar anúncios
-- `POST /audit` - Auditar anúncio
-- `POST /suggest-title` - Sugerir títulos
-- `POST /extract-keywords` - Extrair keywords
+- Todos os endpoints em `/api/*` exigem `Authorization: Bearer <supabase_jwt>`.
+- O `workspace_id` pode vir no claim `workspace_id` do JWT ou no header `X-Workspace-Id`.
 
-## Documentação
+## Entrypoints
 
-Acesse `/docs` para documentação Swagger.
+- Oficial: `api/src/main.py`
+- Compat legado: `api/main.py` (wrapper)
+
+## Prefixos principais
+
+- `/api/market-research`
+- `/api/seo`
+- `/api/ads`
+- `/api/documents`
+- `/api/reports`
+- `/api/alerts`
+- Compat Postman: `/api/monitoring`
+
+## Not implemented
+
+Endpoints ainda nao finalizados retornam HTTP 501 no formato:
+
+```json
+{
+  "error": "not_implemented",
+  "module": "ads",
+  "endpoint": "/api/ads/create",
+  "message": "This endpoint is planned but not implemented yet."
+}
+```
