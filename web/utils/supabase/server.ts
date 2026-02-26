@@ -1,6 +1,10 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+type CookieStoreWritable = {
+  set: (name: string, value: string, options?: CookieOptions) => void
+}
+
 export async function createClient() {
   const cookieStore = await cookies()
 
@@ -15,8 +19,9 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
+            const writable = cookieStore as unknown as CookieStoreWritable
             cookiesToSet.forEach(({ name, value, options }) => {
-              ;(cookieStore as any).set(name, value, options as CookieOptions)
+              writable.set(name, value, options as CookieOptions)
             })
           } catch {
             // Em Server Components pode falhar ao setar cookie — ok

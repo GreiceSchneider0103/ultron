@@ -16,12 +16,14 @@ from api.src.config import get_settings, settings
 from api.src.connectors.base import BaseConnector
 from api.src.connectors.magalu import MagaluConnector
 from api.src.connectors.mercado_livre import MercadoLivreConnector
-from api.src.contracts import validate_against_contract
+from api.src.contracts.validator import validate_against_contract
 from api.src.db import repository
 from api.src.functions import function_calls
 from api.src.functions.generator import generate_bullets, generate_description, generate_titles
 from api.src.orchestrator.agent import MarketAgent
-from api.src.reports import generate_action_plan, generate_audit_report, generate_market_dashboard
+from api.src.reports.action_plan import generate_action_plan
+from api.src.reports.audit_report import generate_audit_report
+from api.src.reports.market_dashboard import generate_market_dashboard
 from api.src.strategy.margin_strategy import decide_margin_strategy
 
 logger = logging.getLogger(__name__)
@@ -46,10 +48,6 @@ def _not_implemented(module: str, endpoint: str, message: str = "This endpoint i
             "message": message,
         },
     )
-
-
-def _not_implemented_from_stub(stub: dict[str, Any]) -> JSONResponse:
-    return JSONResponse(status_code=501, content=stub)
 
 
 @asynccontextmanager
@@ -195,8 +193,14 @@ async def market_product_details(
     ctx: RequestContext = Depends(require_auth_context),
 ):
     normalized_data = await function_calls.get_listing_detail(marketplace=marketplace, listing_id=product_id)
-    valid, err = validate_against_contract(normalized_data, "listing_normalized.schema.json")
-    return {"workspace_id": ctx.workspace_id, "normalized": normalized_data, "contract_valid": valid, "contract_error": err}
+    contract_valid = True
+    contract_error = None
+    try:
+        validate_against_contract(normalized_data, "listing_normalized.schema.json")
+    except Exception as exc:
+        contract_valid = False
+        contract_error = str(exc)
+    return {"workspace_id": ctx.workspace_id, "normalized": normalized_data, "contract_valid": contract_valid, "contract_error": contract_error}
 
 
 @market_research_router.post("/competitor-pricing")
@@ -233,8 +237,7 @@ async def market_trends(
     period: str = "30d",
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    stub = function_calls.get_trends(query=category, region="BR", timeframe=period)
-    return _not_implemented_from_stub(stub)
+    return _not_implemented("market-research", "/api/market-research/trends")
 
 
 @market_research_router.post("/analyze")
@@ -250,15 +253,17 @@ async def market_analyze(
     )
     normalized = [item.to_contract_payload() for item in result.listings]
     dashboard = generate_market_dashboard(
-        normalized_listings=normalized,
-        clusters={},
-        metrics={
-            "price_range": result.price_range,
-            "competitor_summary": result.competitor_summary,
-            "gaps": result.gaps,
-        },
+        listings=normalized,
+        price_range=result.price_range,
+        competitor_summary=result.competitor_summary,
     )
-    valid, err = validate_against_contract(dashboard, "report_outputs.schema.json")
+    valid = True
+    err = None
+    try:
+        validate_against_contract({"market_dashboard": dashboard}, "report_outputs.schema.json")
+    except Exception as exc:
+        valid = False
+        err = str(exc)
     return {
         "research": result.model_dump(),
         "dashboard": dashboard,
@@ -309,9 +314,9 @@ async def seo_analyze_listing(
             supabase_jwt=ctx.token,
         )
     audit_payload = generate_audit_report(
-        my_listing={"scores": {"seo": result.seo_score.score, "conversion": result.conversion_score.score, "competitiveness": result.competitiveness_score.score}},
-        top_competitors=[],
-        ruleset={"version": 1},
+        scores={"seo": result.seo_score.score, "conversion": result.conversion_score.score, "competitiveness": result.competitiveness_score.score},
+        recommendations=result.top_actions,
+        metadata={"version": 1},
     )
     return {"audit": result.model_dump(), "report": audit_payload}
 
@@ -336,8 +341,7 @@ async def seo_ranking(
     keyword: str,
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    stub = function_calls.get_my_listing_performance(listing_id=product_id, metrics=["rank"], timeframe="7d")
-    return _not_implemented_from_stub(stub)
+    return _not_implemented("seo", "/api/seo/ranking")
 
 
 @seo_router.post("/competitor-keywords")
@@ -420,14 +424,12 @@ async def documents_extract(
     extract_type: Optional[str] = None,
     ctx: RequestContext = Depends(require_auth_context),
 ):
-    stub = function_calls.read_pdf(file_id=document_id)
-    return _not_implemented_from_stub(stub) if stub.get("status") == "not_implemented" else stub
+    return _not_implemented("documents", f"/api/documents/{document_id}/extract")
 
 
 @documents_router.post("/analyze")
 async def documents_analyze(req: Dict[str, Any], ctx: RequestContext = Depends(require_auth_context)):
-    stub = function_calls.extract_product_specs(document_text=req.get("text", ""))
-    return _not_implemented_from_stub(stub) if stub.get("status") == "not_implemented" else stub
+    return _not_implemented("documents", "/api/documents/analyze")
 
 
 @reports_router.post("/generate")

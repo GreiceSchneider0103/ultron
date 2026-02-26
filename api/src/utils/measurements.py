@@ -19,7 +19,7 @@ def parse_length_to_cm(value: str | float | int | None) -> Optional[float]:
     unit = match.group(2) or "cm"
 
     if unit == "mm":
-        return number / 10.0
+        return round(number / 10.0, 4)
     if unit == "m":
-        return number * 100.0
-    return number
+        return round(number * 100.0, 4)
+    return round(number, 4)

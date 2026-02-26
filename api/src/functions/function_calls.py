@@ -4,12 +4,10 @@ from typing import Any, Literal, Optional
 
 from api.src.connectors.magalu import MagaluConnector
 from api.src.connectors.mercado_livre import MercadoLivreConnector
-from api.src.reports import (
-    generate_ab_test_plan as _generate_ab_test_plan,
-    generate_action_plan as _generate_action_plan,
-    generate_audit_report as _generate_audit_report,
-    generate_market_dashboard as _generate_market_dashboard,
-)
+from api.src.reports.ab_test_plan import generate_ab_test_plan as _generate_ab_test_plan
+from api.src.reports.action_plan import generate_action_plan as _generate_action_plan
+from api.src.reports.audit_report import generate_audit_report as _generate_audit_report
+from api.src.reports.market_dashboard import generate_market_dashboard as _generate_market_dashboard
 from api.src.types.listing import ListingNormalized
 
 
@@ -126,12 +124,12 @@ def score_image_set(image_analysis: dict[str, Any]) -> dict[str, Any]:
     return _not_implemented("image_scoring_not_implemented", ["Define image score rubric and compute score."])
 
 
-def generate_market_dashboard(normalized_listings: list[dict[str, Any]], clusters: dict[str, Any], metrics: dict[str, Any]) -> dict[str, Any]:
-    return _generate_market_dashboard(normalized_listings=normalized_listings, clusters=clusters, metrics=metrics)
+def generate_market_dashboard(listings: list[dict[str, Any]], price_range: dict[str, Any], competitor_summary: dict[str, Any]) -> dict[str, Any]:
+    return _generate_market_dashboard(listings=listings, price_range=price_range, competitor_summary=competitor_summary)
 
 
-def generate_audit_report(my_listing: dict[str, Any], top_competitors: list[dict[str, Any]], ruleset: dict[str, Any]) -> dict[str, Any]:
-    return _generate_audit_report(my_listing=my_listing, top_competitors=top_competitors, ruleset=ruleset)
+def generate_audit_report(scores: dict[str, Any], recommendations: list[Any], metadata: dict[str, Any]) -> dict[str, Any]:
+    return _generate_audit_report(scores=scores, recommendations=recommendations, metadata=metadata)
 
 
 def generate_action_plan(findings: dict[str, Any], constraints: dict[str, Any]) -> dict[str, Any]:

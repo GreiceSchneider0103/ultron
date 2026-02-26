@@ -208,76 +208,7 @@ class ListingNormalized(BaseModel):
         return v
 
     def to_contract_payload(self) -> dict:
-        badges_list: list[str] = []
-        if self.badges.frete_gratis:
-            badges_list.append("frete_gratis")
-        if self.badges.full:
-            badges_list.append("full")
-        if self.badges.premium:
-            badges_list.append("premium")
-        if self.badges.oficial:
-            badges_list.append("oficial")
-        if self.badges.melhorei_preco:
-            badges_list.append("melhorei_preco")
-        if self.badges.anuncio_patrocinado:
-            badges_list.append("anuncio_patrocinado")
-        if self.badges.parcelamento_sem_juros:
-            badges_list.append("parcelamento_sem_juros")
-
-        media_urls = [m.url for m in self.media if m.url]
-        media_types = []
-        for m in self.media:
-            if m.tipo == MediaType.PHOTO:
-                media_types.append("image")
-            elif m.tipo == MediaType.VIDEO:
-                media_types.append("video")
-            else:
-                media_types.append("other")
-
-        return {
-            "marketplace": self.marketplace.value if hasattr(self.marketplace, "value") else str(self.marketplace),
-            "listing_id": self.listing_id,
-            "url": self.url,
-            "title": self.title,
-            "price": self.price,
-            "shipping_cost": self.shipping_cost,
-            "final_price_estimate": self.final_price_estimate,
-            "condition": self.condition,
-            "category_path": self.category_path,
-            "attributes": {
-                "cor": self.attributes.cor,
-                "material": self.attributes.material,
-                "largura_cm": self.attributes.largura_cm,
-                "profundidade_cm": self.attributes.profundidade_cm,
-                "altura_cm": self.attributes.altura_cm,
-                "peso_kg": self.attributes.peso_kg,
-                "densidade": self.attributes.densidade,
-            },
-            "media": {
-                "cover_url": media_urls[0] if media_urls else None,
-                "urls": media_urls,
-                "types": media_types,
-            },
-            "seller": {
-                "seller_id": self.seller.seller_id,
-                "reputation": self.seller.reputation.value if hasattr(self.seller.reputation, "value") else self.seller.reputation,
-                "years_active": self.seller.years_active,
-                "metrics": self.seller.metrics.model_dump(exclude_none=True) if self.seller.metrics else {},
-            },
-            "social_proof": {
-                "reviews_count": self.social_proof.reviews_count,
-                "rating": self.social_proof.rating,
-                "qa_count": self.social_proof.qa_count,
-            },
-            "badges": badges_list,
-            "text_blocks": {
-                "bullets": self.text_blocks.bullets,
-                "description": self.text_blocks.description,
-            },
-            "seo_terms": self.seo_terms,
-            "signals": self.signals.model_dump(exclude_none=False),
-            "normalized_type": self.normalized_type,
-        }
+        return self.model_dump(mode="json", exclude_none=False)
 
 
 # ── Schemas de scoring (saídas) ───────────────────────────────

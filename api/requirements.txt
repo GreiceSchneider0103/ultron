@@ -36,5 +36,5 @@ python-dotenv==1.0.1
 structlog==24.4.0
 cachetools==5.5.0
 PyJWT[crypto]==2.10.1
-jsonschema==4.23.0
-pytest==8.3.5
+jsonschema==4.26.0
+pytest==9.0.2
