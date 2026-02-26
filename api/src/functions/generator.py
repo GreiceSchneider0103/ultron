@@ -18,7 +18,7 @@ from typing import Optional
 
 import structlog
 
-from src.config import settings
+from api.src.config import settings
 
 log = structlog.get_logger()
 
@@ -225,12 +225,29 @@ Gere um anúncio completo. Responda em JSON:
 
 
 async def generate_audit_recommendations(
-    listing_data: dict,
-    market_data: dict,
-    seo_score: float,
-    conversion_score: float,
+    listing_data: Optional[dict] = None,
+    market_data: Optional[dict] = None,
+    seo_score: float = 0.0,
+    conversion_score: float = 0.0,
+    **kwargs,
 ) -> dict:
     """Gera as 10 próximas ações priorizadas."""
+    # Compat with orchestrator.agent canonical call
+    if listing_data is None and "listing" in kwargs:
+        listing_obj = kwargs["listing"]
+        listing_data = (
+            listing_obj.model_dump(exclude_none=True)
+            if hasattr(listing_obj, "model_dump")
+            else dict(listing_obj)
+        )
+    if market_data is None:
+        competitors = kwargs.get("competitors", [])
+        top_seo_terms = kwargs.get("top_seo_terms", [])
+        market_data = {
+            "competitors_count": len(competitors),
+            "top_seo_terms": top_seo_terms,
+        }
+
     prompt = f"""Meu anúncio: {json.dumps(listing_data, ensure_ascii=False)}
 Dados do mercado: {json.dumps(market_data, ensure_ascii=False)}
 Score SEO: {seo_score}/100 | Score Conversão: {conversion_score}/100

@@ -18,7 +18,7 @@ from typing import Optional
 
 import structlog
 
-from src.types.listing import (
+from api.src.types.listing import (
     ListingNormalized,
     Marketplace,
     MarketResearchResult,

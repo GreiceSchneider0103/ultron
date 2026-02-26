@@ -1,344 +1,599 @@
-"""
-Ultron API - FastAPI Application
-Sistema de inteligência para marketplaces
-"""
+"""Ultron API main entrypoint."""
 
-import os
+from __future__ import annotations
+
 import logging
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from api.src.types.listing import ListingNormalized, Marketplace
-from api.src.connectors.mercado_livre import MercadoLivreConnector
+from api.src.auth import RequestContext, require_auth_context
+from api.src.config import get_settings, settings
+from api.src.connectors.base import BaseConnector
 from api.src.connectors.magalu import MagaluConnector
-
-try:
-    from api.src.orchestrator.agent import MarketAgent
-except ImportError:
-    logger.warning("MarketAgent not found. Running in limited mode.")
-    MarketAgent = None
-
-from api.src.config import settings
+from api.src.connectors.mercado_livre import MercadoLivreConnector
 from api.src.db import repository
+from api.src.functions.generator import generate_bullets, generate_description, generate_titles
+from api.src.orchestrator.agent import MarketAgent
 
-
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
-# Estado global (em produção, usar dependency injection)
-app_state = {
-    "agent": None,
-    "connectors": {}
-}
+def _marketplace_alias(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized in {"mercadolivre", "mercado_livre", "meli"}:
+        return "mercado_livre"
+    if normalized in {"magalu", "magazine_luiza"}:
+        return "magalu"
+    raise HTTPException(status_code=400, detail=f"Unsupported marketplace: {value}")
+
+
+def _not_implemented(module: str, endpoint: str, message: str = "This endpoint is planned but not implemented yet.") -> JSONResponse:
+    return JSONResponse(
+        status_code=501,
+        content={
+            "error": "not_implemented",
+            "module": module,
+            "endpoint": endpoint,
+            "message": message,
+        },
+    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Inicializar conectores ao iniciar"""
-    
-    logger.info("🚀 Inicializando Ultron API...")
-    
-    # Inicializar conectores
-    ml_token = settings.ML_ACCESS_TOKEN
-    
-    connectors = {}
-    
-    if ml_token:
-        connectors["mercado_livre"] = MercadoLivreConnector(ml_token)
-        logger.info("✅ Mercado Livre connector inicializado")
-    else:
-        logger.warning("⚠️ ML_ACCESS_TOKEN não definido")
-        
-    # Inicializar Magalu (Sandbox)
-    connectors["magalu"] = MagaluConnector()
-    logger.info("✅ Magalu connector inicializado (Sandbox Mode)")
-    
-    # Criar agente
-    if MarketAgent:
-        agent = MarketAgent(connectors)
-    else:
-        agent = None
-    
-    app_state["agent"] = agent
-    app_state["connectors"] = connectors
-    
-    logger.info("✅ Ultron API inicializada com sucesso")
-    
+    logger.info("ultron_startup", extra={"environment": settings.ENVIRONMENT})
     yield
-    
-    # Cleanup
-    logger.info("🛑 Encerrando Ultron API...")
+    logger.info("ultron_shutdown")
 
 
 app = FastAPI(
     title="Ultron API",
-    description="Sistema de inteligência para marketplaces (Mercado Livre, Magalu)",
-    version="1.0.0",
-    lifespan=lifespan
+    description="Market/SEO/Ads Intelligence API for Mercado Livre and Magalu",
+    version="1.1.0",
+    lifespan=lifespan,
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-# === MODELS ===
-
-class SearchRequest(BaseModel):
-    """Request para busca de anúncios"""
-    keyword: str = Field(..., description="Keyword para busca")
-    marketplace: str = Field("mercado_livre", description="Marketplace alvo")
-    limit: int = Field(50, ge=1, le=100, description="Limite de resultados")
-    price_min: Optional[float] = Field(None, description="Preço mínimo")
-    price_max: Optional[float] = Field(None, description="Preço máximo")
-    condition: Optional[str] = Field(None, description="Condição (new/used)")
+def get_connectors() -> Dict[str, BaseConnector]:
+    return {
+        "mercado_livre": MercadoLivreConnector(settings.ml_seller_access_token),
+        "magalu": MagaluConnector(),
+    }
 
 
-class AuditRequest(BaseModel):
-    """Request para auditoria de anúncio"""
-    listing: ListingNormalized
-    keyword: str
+def get_connector(marketplace: str) -> BaseConnector:
+    connectors = get_connectors()
+    key = _marketplace_alias(marketplace)
+    if key not in connectors:
+        raise HTTPException(status_code=400, detail=f"Marketplace {marketplace} not supported")
+    return connectors[key]
 
 
-class TitleSuggestRequest(BaseModel):
-    """Request para sugestão de título"""
-    keyword: str
-    attributes: dict
-    marketplace: str = "mercado_livre"
+def get_agent() -> MarketAgent:
+    return MarketAgent(get_connectors())
 
 
-class ValidateTitleRequest(BaseModel):
-    """Request para validar título"""
-    title: str
-    marketplace: str = "mercado_livre"
+class AnalyzeRequest(BaseModel):
+    keyword: str = Field(..., min_length=2)
+    marketplace: str = "mercadolivre"
+    limit: int = Field(default=30, ge=1, le=100)
 
-class SyncRequest(BaseModel):
-    """Request para sincronização operacional"""
-    workspace_id: str = Field(default=settings.DEFAULT_WORKSPACE_ID)
-    skus: List[str]
-    limit: int = 50
-    offset: int = 0
 
-# === ENDPOINTS ===
+class AuditListingRequest(BaseModel):
+    listing_id: str
+    marketplace: str = "mercadolivre"
+    keyword: Optional[str] = None
+
+
+class OptimizeTitleRequest(BaseModel):
+    product_title: str
+    marketplace: str = "mercadolivre"
+    category: Optional[str] = None
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+class CompetitorPricingRequest(BaseModel):
+    product_ids: List[str] = Field(default_factory=list)
+    marketplace: str = "mercadolivre"
+    include_shipping: bool = True
+    include_promotions: bool = True
+
+
+class AdsCreateRequest(BaseModel):
+    marketplace: str = "mercadolivre"
+    product_id: Optional[str] = None
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AlertsCreateRequest(BaseModel):
+    name: str
+    condition: Dict[str, Any] = Field(default_factory=dict)
+    listing_id: Optional[str] = None
+    is_active: bool = True
+
+
+class AlertsUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    condition: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+
+
+market_research_router = APIRouter(prefix="/api/market-research", tags=["market-research"])
+seo_router = APIRouter(prefix="/api/seo", tags=["seo"])
+ads_router = APIRouter(prefix="/api/ads", tags=["ads"])
+documents_router = APIRouter(prefix="/api/documents", tags=["documents"])
+reports_router = APIRouter(prefix="/api/reports", tags=["reports"])
+alerts_router = APIRouter(prefix="/api/alerts", tags=["alerts"])
+monitoring_router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+
 
 @app.get("/")
 async def root():
-    """Raiz da API"""
-    return {
-        "name": "Ultron API",
-        "version": "1.0.0",
-        "status": "running"
-    }
+    return {"name": "Ultron API", "version": app.version, "status": "running"}
 
 
 @app.get("/health")
-async def health():
-    """Health check"""
+async def health(cfg=Depends(get_settings)):
     return {
         "status": "healthy",
-        "connectors": list(app_state["connectors"].keys())
+        "environment": cfg.ENVIRONMENT,
+        "ai_configured": cfg.check_ai_configured(),
+        "ml_configured": cfg.check_ml_configured(),
     }
 
 
-@app.post("/search")
-async def search_marketplace_listings(req: SearchRequest):
-    """
-    📊 Buscar anúncios por keyword
-    
-    Executa:
-    1. Busca na API do marketplace
-    2. Normaliza dados para ListingNormalized
-    3. Gera análises (SEO, concorrentes, gaps)
-    """
-    
-    agent = app_state.get("agent")
-    if not agent:
-        raise HTTPException(status_code=503, detail="Agent não inicializado")
-    
-    try:
-        result = await agent.research_market(
-            keyword=req.keyword,
-            marketplace=req.marketplace,
-            limit=req.limit
+@market_research_router.get("/search")
+async def market_search(
+    marketplace: str,
+    query: str,
+    category: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    connector = get_connector(marketplace)
+    listings = await connector.search_and_normalize(query=query, category_id=category, limit=limit, offset=offset)
+    return {
+        "workspace_id": ctx.workspace_id,
+        "marketplace": _marketplace_alias(marketplace),
+        "query": query,
+        "count": len(listings),
+        "items": [item.model_dump() if hasattr(item, "model_dump") else item for item in listings],
+    }
+
+
+@market_research_router.get("/product/{product_id}")
+async def market_product_details(
+    product_id: str,
+    marketplace: str,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    connector = get_connector(marketplace)
+    raw = await connector.get_listing_details(product_id)
+    normalized = await connector.normalize(raw)
+    normalized_data = normalized.model_dump() if hasattr(normalized, "model_dump") else normalized
+    return {"workspace_id": ctx.workspace_id, "raw": raw, "normalized": normalized_data}
+
+
+@market_research_router.post("/competitor-pricing")
+async def competitor_pricing(
+    req: CompetitorPricingRequest,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    connector = get_connector(req.marketplace)
+    items: List[Dict[str, Any]] = []
+    prices: List[float] = []
+    for product_id in req.product_ids:
+        raw = await connector.get_listing_details(product_id)
+        normalized = await connector.normalize(raw)
+        data = normalized.model_dump() if hasattr(normalized, "model_dump") else normalized
+        items.append(data)
+        if data.get("final_price_estimate"):
+            prices.append(float(data["final_price_estimate"]))
+    return {
+        "workspace_id": ctx.workspace_id,
+        "marketplace": _marketplace_alias(req.marketplace),
+        "items": items,
+        "stats": {
+            "min": min(prices) if prices else 0,
+            "max": max(prices) if prices else 0,
+            "avg": (sum(prices) / len(prices)) if prices else 0,
+        },
+    }
+
+
+@market_research_router.get("/trends")
+async def market_trends(
+    marketplace: str,
+    category: str,
+    period: str = "30d",
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return _not_implemented("market-research", "/api/market-research/trends")
+
+
+@market_research_router.post("/analyze")
+async def market_analyze(
+    req: AnalyzeRequest,
+    ctx: RequestContext = Depends(require_auth_context),
+    agent: MarketAgent = Depends(get_agent),
+):
+    result = await agent.research_market(
+        keyword=req.keyword,
+        marketplace=_marketplace_alias(req.marketplace),
+        limit=req.limit,
+    )
+    return result.model_dump()
+
+
+@seo_router.get("/keywords")
+async def seo_keywords(
+    marketplace: str,
+    product_title: str,
+    category: Optional[str] = None,
+    limit: int = Query(default=20, ge=1, le=50),
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    terms = [part.strip(".,;:!?").lower() for part in product_title.split() if len(part) >= 4]
+    dedup = list(dict.fromkeys(terms))
+    return {"workspace_id": ctx.workspace_id, "marketplace": _marketplace_alias(marketplace), "keywords": dedup[:limit]}
+
+
+@seo_router.post("/analyze-listing")
+async def seo_analyze_listing(
+    req: AuditListingRequest,
+    ctx: RequestContext = Depends(require_auth_context),
+    agent: MarketAgent = Depends(get_agent),
+):
+    result = await agent.audit_listing(
+        listing_id=req.listing_id,
+        marketplace=_marketplace_alias(req.marketplace),
+        keyword=req.keyword,
+    )
+    listing_id = repository.upsert_listings_current(
+        workspace_id=ctx.workspace_id,
+        platform=req.marketplace,
+        external_id=req.listing_id,
+        raw_data={},
+        normalized_data={},
+        derived_data={"source": "seo_analyze_listing"},
+        supabase_jwt=ctx.token,
+    )
+    if listing_id:
+        repository.insert_audit(
+            workspace_id=ctx.workspace_id,
+            listing_id=listing_id,
+            scores=result.model_dump().get("seo_score", {}),
+            recommendations=result.model_dump().get("top_actions", []),
+            supabase_jwt=ctx.token,
         )
-        return result
-        
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        logger.error(f"Erro na busca: {e}")
-        raise HTTPException(status_code=500, detail=f"Erro interno: {str(e)}")
+    return result.model_dump()
+
+
+@seo_router.post("/optimize-title")
+async def seo_optimize_title(
+    req: OptimizeTitleRequest,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    titles = await generate_titles(
+        keyword=req.product_title,
+        marketplace=_marketplace_alias(req.marketplace),
+        n_variants=req.limit,
+    )
+    return {"workspace_id": ctx.workspace_id, "titles": titles}
+
+
+@seo_router.get("/ranking")
+async def seo_ranking(
+    product_id: str,
+    marketplace: str,
+    keyword: str,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return _not_implemented("seo", "/api/seo/ranking")
+
+
+@seo_router.post("/competitor-keywords")
+async def seo_competitor_keywords(
+    req: AnalyzeRequest,
+    ctx: RequestContext = Depends(require_auth_context),
+    agent: MarketAgent = Depends(get_agent),
+):
+    research = await agent.research_market(req.keyword, _marketplace_alias(req.marketplace), limit=req.limit)
+    return {"workspace_id": ctx.workspace_id, "keywords": research.top_seo_terms}
+
+
+@ads_router.get("/campaigns")
+async def ads_campaigns(
+    marketplace: str,
+    status: Optional[str] = None,
+    limit: int = Query(default=20, ge=1, le=100),
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return _not_implemented("ads", "/api/ads/campaigns")
+
+
+@ads_router.get("/campaigns/{campaign_id}/performance")
+async def ads_campaign_performance(
+    campaign_id: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    granularity: str = "daily",
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return _not_implemented("ads", f"/api/ads/campaigns/{campaign_id}/performance")
+
+
+@ads_router.put("/campaigns/{campaign_id}")
+async def ads_campaign_update(
+    campaign_id: str,
+    req: Dict[str, Any],
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return _not_implemented("ads", f"/api/ads/campaigns/{campaign_id}")
+
+
+@ads_router.get("/recommendations")
+async def ads_recommendations(
+    marketplace: str,
+    product_id: Optional[str] = None,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return _not_implemented("ads", "/api/ads/recommendations")
+
+
+@ads_router.post("/create")
+async def ads_create(req: AdsCreateRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return _not_implemented("ads", "/api/ads/create")
+
+
+@ads_router.post("/bulk-create")
+async def ads_bulk_create(req: List[AdsCreateRequest], ctx: RequestContext = Depends(require_auth_context)):
+    return _not_implemented("ads", "/api/ads/bulk-create")
+
+
+@documents_router.post("/upload")
+async def documents_upload(
+    file: Optional[UploadFile] = File(default=None),
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    job_id = repository.create_job(
+        workspace_id=ctx.workspace_id,
+        job_type="document_upload",
+        status="pending",
+        result_summary={"filename": file.filename if file else None},
+        supabase_jwt=ctx.token,
+    )
+    return {"workspace_id": ctx.workspace_id, "document_id": job_id, "status": "pending"}
+
+
+@documents_router.get("/{document_id}/extract")
+async def documents_extract(
+    document_id: str,
+    extract_type: Optional[str] = None,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return _not_implemented("documents", f"/api/documents/{document_id}/extract")
+
+
+@documents_router.post("/analyze")
+async def documents_analyze(req: Dict[str, Any], ctx: RequestContext = Depends(require_auth_context)):
+    return _not_implemented("documents", "/api/documents/analyze")
+
+
+@reports_router.post("/generate")
+async def reports_generate(req: Dict[str, Any], ctx: RequestContext = Depends(require_auth_context)):
+    job_id = repository.create_job(
+        workspace_id=ctx.workspace_id,
+        job_type="report_generate",
+        status="pending",
+        result_summary={"request": req},
+        supabase_jwt=ctx.token,
+    )
+    return {"workspace_id": ctx.workspace_id, "report_id": job_id, "status": "pending"}
+
+
+@reports_router.get("/{report_id}/status")
+async def reports_status(report_id: str, ctx: RequestContext = Depends(require_auth_context)):
+    job = repository.get_job(workspace_id=ctx.workspace_id, job_id=report_id, supabase_jwt=ctx.token)
+    if not job:
+        raise HTTPException(status_code=404, detail="Report job not found.")
+    return {"workspace_id": ctx.workspace_id, "report_id": report_id, "status": job.get("status"), "result": job.get("result_summary")}
+
+
+@reports_router.get("/{report_id}/download")
+async def reports_download(report_id: str, ctx: RequestContext = Depends(require_auth_context)):
+    return _not_implemented("reports", f"/api/reports/{report_id}/download")
+
+
+@alerts_router.post("")
+async def alerts_create(req: AlertsCreateRequest, ctx: RequestContext = Depends(require_auth_context)):
+    alert_id = repository.create_alert_rule(
+        workspace_id=ctx.workspace_id,
+        name=req.name,
+        condition=req.condition,
+        listing_id=req.listing_id,
+        is_active=req.is_active,
+        supabase_jwt=ctx.token,
+    )
+    if not alert_id:
+        raise HTTPException(status_code=500, detail="Failed to create alert rule.")
+    return {"id": alert_id}
+
+
+@alerts_router.get("")
+async def alerts_list(ctx: RequestContext = Depends(require_auth_context)):
+    return {"items": repository.list_alert_rules(workspace_id=ctx.workspace_id, supabase_jwt=ctx.token)}
+
+
+@alerts_router.put("/{alert_id}")
+async def alerts_update(alert_id: str, req: AlertsUpdateRequest, ctx: RequestContext = Depends(require_auth_context)):
+    payload = req.model_dump(exclude_none=True)
+    ok = repository.update_alert_rule(workspace_id=ctx.workspace_id, alert_id=alert_id, data=payload, supabase_jwt=ctx.token)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to update alert rule.")
+    return {"ok": True}
+
+
+@alerts_router.delete("/{alert_id}")
+async def alerts_delete(alert_id: str, ctx: RequestContext = Depends(require_auth_context)):
+    ok = repository.delete_alert_rule(workspace_id=ctx.workspace_id, alert_id=alert_id, supabase_jwt=ctx.token)
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to delete alert rule.")
+    return {"ok": True}
+
+
+@alerts_router.get("/events")
+async def alerts_events(ctx: RequestContext = Depends(require_auth_context)):
+    return {"items": repository.list_alert_events(workspace_id=ctx.workspace_id, supabase_jwt=ctx.token)}
+
+
+# Monitoring compatibility aliases used by Postman collection
+@monitoring_router.post("/alerts")
+async def monitoring_alerts_create(req: AlertsCreateRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return await alerts_create(req=req, ctx=ctx)
+
+
+@monitoring_router.get("/alerts")
+async def monitoring_alerts_list(
+    marketplace: Optional[str] = None,
+    status: Optional[str] = None,
+    product_id: Optional[str] = None,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return await alerts_list(ctx=ctx)
+
+
+@monitoring_router.get("/events")
+async def monitoring_events(
+    product_id: Optional[str] = None,
+    marketplace: Optional[str] = None,
+    event_type: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    return await alerts_events(ctx=ctx)
+
+
+# Legacy routes compatibility
+@app.post("/search")
+async def legacy_search(req: AnalyzeRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return await market_search(
+        marketplace=req.marketplace,
+        query=req.keyword,
+        category=None,
+        limit=req.limit,
+        offset=0,
+        ctx=ctx,
+    )
+
+
+@app.post("/research")
+async def legacy_research(req: AnalyzeRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return await market_analyze(req=req, ctx=ctx, agent=get_agent())
+
+
+@app.post("/audit")
+async def legacy_audit(req: AuditListingRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return await seo_analyze_listing(req=req, ctx=ctx, agent=get_agent())
+
+
+@app.post("/suggest-title")
+async def legacy_suggest_title(req: OptimizeTitleRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return await seo_optimize_title(req=req, ctx=ctx)
+
+
+@app.post("/validate-title")
+async def legacy_validate_title(req: OptimizeTitleRequest, ctx: RequestContext = Depends(require_auth_context)):
+    connector = get_connector(req.marketplace)
+    return connector.validate_title(req.product_title)
+
+
+@app.post("/generate/titles")
+async def legacy_generate_titles(req: OptimizeTitleRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return await seo_optimize_title(req=req, ctx=ctx)
+
+
+@app.post("/generate/bullets")
+async def legacy_generate_bullets(req: AnalyzeRequest, ctx: RequestContext = Depends(require_auth_context)):
+    bullets = await generate_bullets(keyword=req.keyword, marketplace=_marketplace_alias(req.marketplace), n_bullets=5)
+    return {"bullets": bullets}
+
+
+@app.post("/generate/description")
+async def legacy_generate_description(req: AnalyzeRequest, ctx: RequestContext = Depends(require_auth_context)):
+    description = await generate_description(keyword=req.keyword, marketplace=_marketplace_alias(req.marketplace))
+    return {"description": description}
+
+
+@app.post("/create-listing")
+async def legacy_create_listing(req: AnalyzeRequest, ctx: RequestContext = Depends(require_auth_context)):
+    return _not_implemented("seo", "/create-listing")
+
+
+@app.post("/compare")
+async def legacy_compare(req: Dict[str, Any], ctx: RequestContext = Depends(require_auth_context)):
+    return _not_implemented("market-research", "/compare")
 
 
 @app.post("/operations/sync")
-async def sync_operations(req: SyncRequest):
-    """
-    🔄 Sincronizar dados operacionais (Seller Data)
-    Focado em Magalu: Puxa portfólio, scores e estoque.
-    """
-    connector = app_state["connectors"].get("magalu")
-    if not connector:
-        raise HTTPException(status_code=503, detail="Magalu connector not initialized")
-    
-    results = {
-        "synced": 0,
-        "failed": 0,
-        "errors": []
-    }
-    
-    # Busca scores em lote (mais eficiente)
-    scores_map = {}
-    try:
-        scores_list = await connector.get_scores(limit=req.limit, offset=req.offset)
-        # Cria mapa SKU -> Score Data
-        for item in scores_list:
-            s_sku = item.get("sku", item.get("id"))
-            if s_sku: scores_map[s_sku] = item
-    except Exception as e:
-        logger.error(f"Failed to fetch batch scores: {e}")
-
-    for sku in req.skus:
+async def operations_sync(
+    skus: List[str],
+    marketplace: str = "magalu",
+    ctx: RequestContext = Depends(require_auth_context),
+):
+    connector = get_connector(marketplace)
+    results = {"synced": 0, "failed": 0, "errors": []}
+    for sku in skus:
         try:
-            # 1. Busca Preço (Endpoint Real)
-            price_data = await connector.get_price(sku)
-            
-            # 2. Combina com Score (se houver)
-            raw_combined = {
-                "sku": sku,
-                "price_data": price_data,
-                "score_data": scores_map.get(sku, {})
-            }
-            
-            # 3. Normaliza
-            normalized = await connector.normalize_listing(raw_combined)
-            
-            # 4. Salva no Supabase
+            raw = await connector.get_listing_details(sku)
+            normalized = await connector.normalize(raw)
+            normalized_data = normalized.model_dump() if hasattr(normalized, "model_dump") else normalized
             listing_uuid = repository.upsert_listings_current(
-                workspace_id=req.workspace_id,
-                platform="magalu",
+                workspace_id=ctx.workspace_id,
+                platform=marketplace,
                 external_id=sku,
-                raw_data=raw_combined,
-                normalized_data=normalized.dict(),
-                derived_data={"sync_source": "operations_sync"}
+                raw_data=raw,
+                normalized_data=normalized_data,
+                derived_data={"source": "operations_sync"},
+                supabase_jwt=ctx.token,
             )
-            
             if listing_uuid:
                 repository.insert_snapshot_if_changed(
-                    workspace_id=req.workspace_id,
+                    workspace_id=ctx.workspace_id,
                     listing_uuid=listing_uuid,
-                    raw_data=raw_combined,
-                    normalized_data=normalized.dict(),
-                    derived_data={"sync_source": "operations_sync"}
+                    raw_data=raw,
+                    normalized_data=normalized_data,
+                    derived_data={"source": "operations_sync"},
+                    supabase_jwt=ctx.token,
                 )
                 results["synced"] += 1
             else:
                 results["failed"] += 1
-                results["errors"].append(f"Failed to upsert SKU {sku}")
-                
-        except Exception as e:
-            logger.error(f"Error syncing SKU {sku}: {e}")
+        except Exception as exc:
             results["failed"] += 1
-            results["errors"].append(str(e))
-            
+            results["errors"].append(str(exc))
     return results
 
 
-@app.post("/audit")
-async def audit_listing(req: AuditRequest):
-    """
-    🔍 Auditar meu anúncio vs concorrentes
-    
-    Compara seu anúncio com os top 20 concorrentes e gera:
-    - Score SEO
-    - Score de conversão
-    - Score de competitividade
-    - Recomendações de otimização
-    """
-    
-    agent = app_state.get("agent")
-    if not agent:
-        raise HTTPException(status_code=503, detail="Agent não inicializado")
-    
-    try:
-        result = await agent.audit_my_listing(
-            my_listing=req.listing,
-            keyword=req.keyword
-        )
-        return result
-        
-    except Exception as e:
-        logger.error(f"Erro na auditoria: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/suggest-title")
-async def suggest_title_variants(req: TitleSuggestRequest):
-    """
-    ✏️ Sugerir títulos otimizados
-    
-    Gera variações de título baseadas em:
-    - Keyword da busca
-    - Atributos do produto
-    - Melhores práticas do marketplace
-    """
-    
-    agent = app_state.get("agent")
-    if not agent:
-        raise HTTPException(status_code=503, detail="Agent não inicializado")
-    
-    try:
-        suggestions = await agent.suggest_title(
-            keyword=req.keyword,
-            attributes=req.attributes,
-            marketplace=req.marketplace
-        )
-        return {"suggestions": suggestions}
-        
-    except Exception as e:
-        logger.error(f"Erro ao sugerir títulos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/validate-title")
-async def validate_title(req: ValidateTitleRequest):
-    """
-    ✅ Validar título
-    
-    Verifica se o título está dentro das regras do marketplace:
-    - Comprimento máximo
-    - Palavras proibidas
-    """
-    
-    connector = app_state["connectors"].get(req.marketplace)
-    if not connector:
-        raise HTTPException(status_code=400, detail=f"Marketplace {req.marketplace} não suportado")
-    
-    validation = connector.validate_title(req.title)
-    return validation
-
-
-@app.get("/marketplaces")
-async def list_marketplaces():
-    """Listar marketplaces disponíveis"""
-    return {
-        "marketplaces": list(app_state["connectors"].keys())
-    }
-
-
-# === DOCUMENTAÇÃO ===
-# Acesse /docs para Swagger UI
-# Acesse /redoc para documentação alternativa
+app.include_router(market_research_router)
+app.include_router(seo_router)
+app.include_router(ads_router)
+app.include_router(documents_router)
+app.include_router(reports_router)
+app.include_router(alerts_router)
+app.include_router(monitoring_router)

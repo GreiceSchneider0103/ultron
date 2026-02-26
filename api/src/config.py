@@ -3,8 +3,7 @@ config.py — Configuração ÚNICA do projeto Ultron.
 COLOQUE EM: api/src/config.py
 
 APAGUE: api/src/orchestrator/config.py  (o duplicado)
-Todo import de config em qualquer módulo deve ser:
-    from src.config import settings
+Todo import de config em qualquer módulo deve usar o pacote `api.src`.
 """
 from __future__ import annotations
 from functools import lru_cache
@@ -25,6 +24,7 @@ class Settings(BaseSettings):
 
     # ── Supabase (produção) ────────────────────────────────────
     SUPABASE_URL: Optional[str] = None
+    SUPABASE_ANON_KEY: Optional[str] = None
     SUPABASE_SERVICE_ROLE_KEY: Optional[str] = None
     DEFAULT_WORKSPACE_ID: str = "00000000-0000-0000-0000-000000000000"
 
@@ -64,6 +64,28 @@ class Settings(BaseSettings):
         return self.MAGALU_SANDBOX_BASE_URL if self.MAGALU_USE_SANDBOX else self.MAGALU_BASE_URL
 
     @property
+    def MAGALU_SANDBOX(self) -> bool:
+        """Compat alias for legacy code paths."""
+        return self.MAGALU_USE_SANDBOX
+
+    @property
+    def ml_seller_access_token(self) -> str:
+        """Compat alias for legacy connector access."""
+        return self.ML_ACCESS_TOKEN
+
+    @property
+    def default_ai_provider(self) -> str:
+        return self.DEFAULT_AI_PROVIDER
+
+    @property
+    def environment(self) -> str:
+        return self.ENVIRONMENT
+
+    @property
+    def magalu_scraping_delay_ms(self) -> int:
+        return self.MAGALU_SCRAPING_DELAY_MS
+
+    @property
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",")]
 
@@ -77,8 +99,16 @@ class Settings(BaseSettings):
             return bool(self.ANTHROPIC_API_KEY)
         return bool(self.OPENAI_API_KEY)
 
+    def check_ai_configured(self) -> bool:
+        """Compat method for legacy callers."""
+        return self.ai_configured()
+
     def ml_configured(self) -> bool:
         return bool(self.ML_ACCESS_TOKEN or (self.ML_CLIENT_ID and self.ML_CLIENT_SECRET))
+
+    def check_ml_configured(self) -> bool:
+        """Compat method for legacy callers."""
+        return self.ml_configured()
 
     def magalu_configured(self) -> bool:
         return bool(self.MAGALU_ACCESS_TOKEN or self.MAGALU_CLIENT_ID)
@@ -89,5 +119,5 @@ def get_settings() -> Settings:
     return Settings()
 
 
-# Instância global para import direto: from src.config import settings
+# Instância global para import direto
 settings = get_settings()
