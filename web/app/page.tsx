@@ -4,8 +4,8 @@ export default async function Home() {
   const supabase = await createClient()
 
   const { error: erroBanco } = await supabase
-    .from('profiles')
-    .select('*')
+    .from('marketplace_rulesets')
+    .select('id')
     .limit(1)
 
   return (
@@ -24,8 +24,8 @@ export default async function Home() {
 
       <div style={{ background: '#f4f4f4', padding: '15px', borderRadius: '8px' }}>
         <p>
-          <strong>Dica:</strong> Se aparecer erro de &quot;PGRST116&quot; ou &quot;Relation not found&quot;,
-          verifique se o nome da tabela no codigo e o mesmo do SQL.
+          <strong>Dica:</strong> Este check usa a tabela &quot;marketplace_rulesets&quot; do schema V5.
+          Se aparecer &quot;relation not found&quot;, aplique o SQL do schema atualizado.
         </p>
       </div>
     </div>

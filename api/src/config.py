@@ -13,14 +13,12 @@ from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _API_DIR = Path(__file__).resolve().parents[1]
-_ROOT_DIR = _API_DIR.parent
 _API_ENV_FILE = _API_DIR / ".env"
-_ROOT_ENV_FILE = _ROOT_DIR / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(str(_API_ENV_FILE), str(_ROOT_ENV_FILE)),
+        env_file=str(_API_ENV_FILE),
         env_file_encoding="utf-8",
         extra="ignore",          # ignora variÃ¡veis extras no .env sem errar
     )
@@ -130,5 +128,6 @@ def get_settings() -> Settings:
 
 # InstÃ¢ncia global para import direto
 settings = get_settings()
+
 
 
