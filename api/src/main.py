@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.src.auth import RequestContext, require_auth_context
 from api.src.config import get_settings, settings
 from api.src.functions.generator import generate_bullets, generate_description
-from api.src.routers import ads, alerts, documents, market_research, reports, seo
+from api.src.routers import ads, alerts, documents, images_v2, market_research, reports, seo
 from api.src.routers.common import not_implemented
 from api.src.routers.schemas import AnalyzeRequest, AuditListingRequest, OptimizeTitleRequest
 from api.src.services.marketplace import get_connector, marketplace_alias
@@ -135,3 +135,4 @@ app.include_router(documents.router)
 app.include_router(reports.router)
 app.include_router(alerts.router)
 app.include_router(alerts.monitoring_router)
+app.include_router(images_v2.router)

@@ -45,3 +45,44 @@ async def reports_status(report_id: str, ctx: RequestContext = Depends(require_a
 @router.get("/{report_id}/download")
 async def reports_download(report_id: str, ctx: RequestContext = Depends(require_auth_context)):
     return not_implemented("reports", f"/api/reports/{report_id}/download")
+
+
+@router.get("/v2/insights")
+async def reports_insights_v2(ctx: RequestContext = Depends(require_auth_context)):
+    client = repository._make_client(supabase_jwt=ctx.token)
+    if not client:
+        raise HTTPException(status_code=503, detail="Supabase unavailable")
+
+    def _count(table: str, filters: Dict[str, Any]) -> int:
+        query = client.table(table).select("id", count="exact", head=True)
+        for key, value in filters.items():
+            query = query.eq(key, value)
+        resp = query.execute()
+        return int(resp.count or 0)
+
+    listings_count = _count("listings_current", {"workspace_id": ctx.workspace_id})
+    alerts_count = _count("alert_events", {"workspace_id": ctx.workspace_id, "status": "triggered"})
+    jobs_open = (
+        client.table("jobs")
+        .select("id", count="exact", head=True)
+        .eq("workspace_id", ctx.workspace_id)
+        .in_("status", ["pending", "processing"])
+        .execute()
+    )
+    audits_count = _count("audits", {"workspace_id": ctx.workspace_id})
+
+    return {
+        "workspace_id": ctx.workspace_id,
+        "metrics": [
+            {"label": "Listings monitorados", "value": listings_count, "delta": 0, "tone": "neutral"},
+            {"label": "Jobs em andamento", "value": int(jobs_open.count or 0), "delta": 0, "tone": "warning"},
+            {"label": "Alertas ativos", "value": alerts_count, "delta": 0, "tone": "danger"},
+            {"label": "Auditorias executadas", "value": audits_count, "delta": 0, "tone": "success"},
+        ],
+        "next_actions": [
+            {"title": "Rodar nova pesquisa de mercado", "href": "/pesquisa"},
+            {"title": "Executar auditoria em anuncio principal", "href": "/auditoria"},
+            {"title": "Criar alerta de queda de preco", "href": "/monitoramento"},
+            {"title": "Gerar relatorio de estrategia", "href": "/relatorios"},
+        ],
+    }

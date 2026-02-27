@@ -299,7 +299,7 @@ with check (true);
 drop policy if exists "User can view workspace members" on public.workspace_members;
 create policy "User can view workspace members"
 on public.workspace_members for select
-using (workspace_id in (select workspace_id from public.workspace_members where user_id = auth.uid()));
+using (user_id = auth.uid());
 
 drop policy if exists "User can join only self" on public.workspace_members;
 create policy "User can join only self"
@@ -405,4 +405,3 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user_workspace();
-
