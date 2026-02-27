@@ -8,6 +8,7 @@ import { useApiAction } from '@/hooks/use-api-action'
 import { extractProductSpec, parseDocument } from '@/services/documents.service'
 import { analyzeImages } from '@/services/images.service'
 import { suggestTitleVariants, validateTitle } from '@/services/seo.service'
+import { RetryButton } from '@/components/ui/retry-button'
 
 export function GenerateAdPage({ workspaceId }: { workspaceId: string }) {
   const [step, setStep] = useState(1)
@@ -130,8 +131,18 @@ export function GenerateAdPage({ workspaceId }: { workspaceId: string }) {
                   Extrair ficha
                 </button>
               </div>
-              {docAction.error ? <ErrorState message={docAction.error} /> : null}
-              {extractAction.error ? <ErrorState message={extractAction.error} /> : null}
+              {docAction.error ? (
+                <div className="mt-3 space-y-2">
+                  <ErrorState message={docAction.error} />
+                  <RetryButton onRetry={onUploadDocument} loading={docAction.loading} />
+                </div>
+              ) : null}
+              {extractAction.error ? (
+                <div className="mt-3 space-y-2">
+                  <ErrorState message={extractAction.error} />
+                  <RetryButton onRetry={onExtractSpecs} loading={extractAction.loading} />
+                </div>
+              ) : null}
               {docAction.data ? <div className="mt-3"><JsonView value={docAction.data} /></div> : null}
               {extractAction.data ? <div className="mt-3"><JsonView value={extractAction.data} /></div> : null}
             </Card>
@@ -148,7 +159,12 @@ export function GenerateAdPage({ workspaceId }: { workspaceId: string }) {
               >
                 Validar regras
               </button>
-              {validateAction.error ? <div className="mt-3"><ErrorState message={validateAction.error} /></div> : null}
+              {validateAction.error ? (
+                <div className="mt-3 space-y-2">
+                  <ErrorState message={validateAction.error} />
+                  <RetryButton onRetry={onValidateTitle} loading={validateAction.loading} />
+                </div>
+              ) : null}
               {validateAction.data ? <div className="mt-3"><JsonView value={validateAction.data} /></div> : null}
             </Card>
           )}
@@ -165,7 +181,12 @@ export function GenerateAdPage({ workspaceId }: { workspaceId: string }) {
               <button type="button" onClick={onGenerateTitles} className="mt-3 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white">
                 Sugerir variacoes de titulo
               </button>
-              {titlesAction.error ? <div className="mt-3"><ErrorState message={titlesAction.error} /></div> : null}
+              {titlesAction.error ? (
+                <div className="mt-3 space-y-2">
+                  <ErrorState message={titlesAction.error} />
+                  <RetryButton onRetry={onGenerateTitles} loading={titlesAction.loading} />
+                </div>
+              ) : null}
               {titlesAction.data ? <div className="mt-3"><JsonView value={titlesAction.data} /></div> : null}
             </Card>
           )}
@@ -182,7 +203,12 @@ export function GenerateAdPage({ workspaceId }: { workspaceId: string }) {
               <button type="button" onClick={onAnalyzeImage} className="mt-3 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white">
                 Analisar imagem
               </button>
-              {imageAction.error ? <div className="mt-3"><ErrorState message={imageAction.error} /></div> : null}
+              {imageAction.error ? (
+                <div className="mt-3 space-y-2">
+                  <ErrorState message={imageAction.error} />
+                  <RetryButton onRetry={onAnalyzeImage} loading={imageAction.loading} />
+                </div>
+              ) : null}
               {imageAction.data ? <div className="mt-3"><JsonView value={imageAction.data} /></div> : null}
             </Card>
           )}

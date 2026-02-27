@@ -2,19 +2,29 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.src.auth import RequestContext, require_auth_context
 from api.src.db import repository
 from api.src.reports.action_plan import generate_action_plan
 from api.src.routers.common import not_implemented
+from api.src.services.governance import track_expensive_call
 from api.src.strategy.margin_strategy import decide_margin_strategy
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 
 @router.post("/generate")
-async def reports_generate(req: Dict[str, Any], ctx: RequestContext = Depends(require_auth_context)):
+async def reports_generate(req: Dict[str, Any], request: Request, ctx: RequestContext = Depends(require_auth_context)):
+    trace_id = getattr(request.state, "trace_id", None)
+    track_expensive_call(
+        workspace_id=ctx.workspace_id,
+        user_id=ctx.user_id,
+        feature="reports_generate",
+        trace_id=trace_id,
+        metadata={"endpoint": "/api/reports/generate"},
+        supabase_jwt=ctx.token,
+    )
     strategy = decide_margin_strategy(
         cost=float(req.get("cost", 0)),
         min_margin_pct=float(req.get("min_margin_pct", 20)),
@@ -70,6 +80,8 @@ async def reports_insights_v2(ctx: RequestContext = Depends(require_auth_context
         .execute()
     )
     audits_count = _count("audits", {"workspace_id": ctx.workspace_id})
+    images_calls = repository.count_usage_logs(workspace_id=ctx.workspace_id, feature="images_analyze", supabase_jwt=ctx.token)
+    reports_calls = repository.count_usage_logs(workspace_id=ctx.workspace_id, feature="reports_generate", supabase_jwt=ctx.token)
 
     return {
         "workspace_id": ctx.workspace_id,
@@ -78,6 +90,8 @@ async def reports_insights_v2(ctx: RequestContext = Depends(require_auth_context
             {"label": "Jobs em andamento", "value": int(jobs_open.count or 0), "delta": 0, "tone": "warning"},
             {"label": "Alertas ativos", "value": alerts_count, "delta": 0, "tone": "danger"},
             {"label": "Auditorias executadas", "value": audits_count, "delta": 0, "tone": "success"},
+            {"label": "Chamadas caras (imagens)", "value": images_calls, "delta": 0, "tone": "neutral"},
+            {"label": "Chamadas caras (relatorios)", "value": reports_calls, "delta": 0, "tone": "neutral"},
         ],
         "next_actions": [
             {"title": "Rodar nova pesquisa de mercado", "href": "/pesquisa"},

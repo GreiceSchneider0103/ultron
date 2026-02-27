@@ -46,9 +46,16 @@ export async function apiRequest<T>({
     throw err
   }
 
+  // sempre usar proxy relativo para evitar CORS
   const baseUrl = '/api/proxy'
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+
+  // Check for custom API URL in localStorage (client-side only)
+  let customApiBase = ''
+  if (typeof window !== 'undefined') {
+    customApiBase = localStorage.getItem('ultron_api_base_url') || ''
+  }
 
   try {
     const response = await fetch(`${baseUrl}${path}${toQueryString(query)}`, {
@@ -56,6 +63,7 @@ export async function apiRequest<T>({
       signal: controller.signal,
       headers: {
         Authorization: `Bearer ${token}`,
+        ...(customApiBase ? { 'X-Ultron-Api-Base': customApiBase } : {}),
         ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
         ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
       },
@@ -73,8 +81,9 @@ export async function apiRequest<T>({
     }
 
     if (!response.ok) {
+      // Se o proxy retornou um erro padronizado, propaga-lo
       const err: ApiError = {
-        message: (parsed as { detail?: string })?.detail || `Falha na API (${response.status})`,
+        message: (parsed as { message?: string })?.message || `Falha na API (${response.status})`,
         status: response.status,
         detail: parsed,
       }
@@ -83,6 +92,7 @@ export async function apiRequest<T>({
 
     return parsed as T
   } catch (err) {
+    // Normaliza e relança ApiError com message
     if (typeof err === 'object' && err !== null && 'message' in err) {
       throw err as ApiError
     }
@@ -92,8 +102,7 @@ export async function apiRequest<T>({
         : err instanceof Error
           ? `Falha de conexao com a API: ${err.message}`
           : 'Falha de conexao com a API.'
-    const wrapped: ApiError = { message }
-    throw wrapped
+    throw { message } as ApiError
   } finally {
     clearTimeout(timer)
   }
@@ -130,7 +139,7 @@ export async function apiRequestMultipart<T>({
     const text = await response.text()
     const parsed = text ? JSON.parse(text) : {}
     if (!response.ok) {
-      throw { message: (parsed as { detail?: string })?.detail || `Falha na API (${response.status})` } as ApiError
+      throw { message: (parsed as { message?: string })?.message || `Falha na API (${response.status})`, detail: parsed } as ApiError
     }
     return parsed as T
   } catch (err) {

@@ -7,6 +7,7 @@ import { useApiAction } from '@/hooks/use-api-action'
 import { analyzeMarket, getListingDetails, searchMarketplaceListings } from '@/services/market.service'
 import { extractKeywordsFromTopListings } from '@/services/seo.service'
 import { JsonView } from '@/components/pages/json-view'
+import { RetryButton } from '@/components/ui/retry-button'
 
 export function MarketResearchPage({ workspaceId }: { workspaceId: string }) {
   const [mode, setMode] = useState<'link' | 'keyword' | 'manual'>('keyword')
@@ -34,12 +35,12 @@ export function MarketResearchPage({ workspaceId }: { workspaceId: string }) {
     return query.trim()
   }, [linkInput, manualTitle, mode, query])
 
-  async function onSearch(e: FormEvent) {
-    e.preventDefault()
+  async function performSearch() {
     if (!effectiveQuery) {
       searchAction.setError('Informe um link, keyword ou dados do produto.')
       return
     }
+
     await searchAction.run(async () => {
       const data = await searchMarketplaceListings(workspaceId, {
         marketplace,
@@ -50,6 +51,11 @@ export function MarketResearchPage({ workspaceId }: { workspaceId: string }) {
       if (data.items?.[0]?.id) setSelectedId(String(data.items[0].id))
       return { count: data.count, items: data.items as Array<Record<string, unknown>> }
     })
+  }
+
+  async function onSearch(e: FormEvent) {
+    e.preventDefault()
+    await performSearch()
   }
 
   async function onLoadDetails() {
@@ -236,7 +242,12 @@ export function MarketResearchPage({ workspaceId }: { workspaceId: string }) {
         </Card>
       </div>
 
-      {searchAction.error ? <ErrorState message={searchAction.error} /> : null}
+      {searchAction.error ? (
+        <div className="space-y-2">
+          <ErrorState message={searchAction.error} />
+          <RetryButton onRetry={performSearch} loading={searchAction.loading} />
+        </div>
+      ) : null}
 
       {!searchAction.loading && (searchAction.data?.items?.length ?? 0) === 0 ? (
         <EmptyState title="Sem resultados" description="Ajuste os filtros e tente novamente." />

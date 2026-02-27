@@ -3,8 +3,7 @@ from __future__ import annotations
 import httpx
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.src.auth import RequestContext, require_auth_context
 from api.src.config import settings
@@ -112,10 +111,7 @@ async def my_listings(
         return {"workspace_id": ctx.workspace_id, "items": [], "count": 0}
 
     if not settings.ML_ACCESS_TOKEN:
-        return JSONResponse(
-            status_code=422,
-            content={"error": "token_required", "message": "ML_ACCESS_TOKEN not configured."},
-        )
+        raise HTTPException(status_code=422, detail="ML_ACCESS_TOKEN not configured.")
 
     headers = {"Authorization": f"Bearer {settings.ML_ACCESS_TOKEN}"}
     async with httpx.AsyncClient(timeout=30.0) as client:

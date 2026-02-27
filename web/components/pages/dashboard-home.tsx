@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import { useApiAction } from '@/hooks/use-api-action'
 import { getDashboardInsights } from '@/services/reports.service'
 import { Badge, Card, EmptyState, ErrorState, Skeleton } from '@/components/ui/primitives'
+import { RetryButton } from '@/components/ui/retry-button'
 
 export function DashboardHome({ workspaceId }: { workspaceId: string }) {
   const insights = useApiAction<Record<string, unknown>>()
@@ -36,7 +37,17 @@ export function DashboardHome({ workspaceId }: { workspaceId: string }) {
         </div>
       )}
 
-      {insights.error ? <ErrorState message={insights.error} onRetry={() => runInsights(() => getDashboardInsights(workspaceId))} /> : null}
+      {insights.error ? (
+        <div className="space-y-2">
+          <ErrorState message={insights.error} />
+          <RetryButton
+            onRetry={async () => {
+              await runInsights(() => getDashboardInsights(workspaceId))
+            }}
+            loading={insights.loading}
+          />
+        </div>
+      ) : null}
 
       {!insights.loading && !insights.error && metrics.length === 0 ? (
         <EmptyState title="Sem indicadores ainda" description="Execute uma pesquisa ou auditoria para alimentar o dashboard." />

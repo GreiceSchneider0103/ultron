@@ -7,6 +7,7 @@ import { Card, ErrorState } from '@/components/ui/primitives'
 import { useApiAction } from '@/hooks/use-api-action'
 import { compareVsCompetitors, getListingDetails, searchMarketplaceListings } from '@/services/market.service'
 import { auditListing } from '@/services/seo.service'
+import { RetryButton } from '@/components/ui/retry-button'
 
 export function AdAuditPage({ workspaceId }: { workspaceId: string }) {
   const [listingId, setListingId] = useState('')
@@ -18,10 +19,14 @@ export function AdAuditPage({ workspaceId }: { workspaceId: string }) {
   const auditAction = useApiAction<Record<string, unknown>>()
   const compareAction = useApiAction<Record<string, unknown>>()
 
-  async function onLoadMyListing(e: FormEvent) {
-    e.preventDefault()
+  async function performLoadMyListing() {
     if (!listingId) return
     await myListingAction.run(() => getListingDetails(workspaceId, listingId, marketplace))
+  }
+
+  async function onLoadMyListing(e: FormEvent) {
+    e.preventDefault()
+    await performLoadMyListing()
   }
 
   async function onLoadCompetitors() {
@@ -96,10 +101,30 @@ export function AdAuditPage({ workspaceId }: { workspaceId: string }) {
         ))}
       </section>
 
-      {myListingAction.error ? <ErrorState message={myListingAction.error} /> : null}
-      {competitorsAction.error ? <ErrorState message={competitorsAction.error} /> : null}
-      {auditAction.error ? <ErrorState message={auditAction.error} /> : null}
-      {compareAction.error ? <ErrorState message={compareAction.error} /> : null}
+      {myListingAction.error ? (
+        <div className="space-y-2">
+          <ErrorState message={myListingAction.error} />
+          <RetryButton onRetry={performLoadMyListing} loading={myListingAction.loading} />
+        </div>
+      ) : null}
+      {competitorsAction.error ? (
+        <div className="space-y-2">
+          <ErrorState message={competitorsAction.error} />
+          <RetryButton onRetry={onLoadCompetitors} loading={competitorsAction.loading} />
+        </div>
+      ) : null}
+      {auditAction.error ? (
+        <div className="space-y-2">
+          <ErrorState message={auditAction.error} />
+          <RetryButton onRetry={onAudit} loading={auditAction.loading} />
+        </div>
+      ) : null}
+      {compareAction.error ? (
+        <div className="space-y-2">
+          <ErrorState message={compareAction.error} />
+          <RetryButton onRetry={onCompare} loading={compareAction.loading} />
+        </div>
+      ) : null}
 
       {myListingAction.data ? (
         <Card>

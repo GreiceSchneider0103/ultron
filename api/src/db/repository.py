@@ -82,7 +82,7 @@ def get_listing(
         )
         return (resp.data or [None])[0]
     except Exception as exc:
-        logger.error("repository_get_listing_failed", error=str(exc))
+        logger.error("repository_get_listing_failed: %s", exc)
         return None
 
 
@@ -118,7 +118,7 @@ def upsert_listings_current(
             return None
         return data[0].get("id")
     except Exception as exc:
-        logger.error("repository_upsert_listings_current_failed", error=str(exc))
+        logger.error("repository_upsert_listings_current_failed: %s", exc)
         return None
 
 
@@ -160,7 +160,7 @@ def insert_snapshot_if_changed(
         ).execute()
         return True
     except Exception as exc:
-        logger.error("repository_insert_snapshot_failed", error=str(exc))
+        logger.error("repository_insert_snapshot_failed: %s", exc)
         return False
 
 
@@ -184,7 +184,7 @@ def get_latest_snapshot(
         )
         return (resp.data or [None])[0]
     except Exception as exc:
-        logger.error("repository_get_latest_snapshot_failed", error=str(exc))
+        logger.error("repository_get_latest_snapshot_failed: %s", exc)
         return None
 
 
@@ -214,7 +214,7 @@ def insert_audit(
         data = resp.data or []
         return data[0].get("id") if data else None
     except Exception as exc:
-        logger.error("repository_insert_audit_failed", error=str(exc))
+        logger.error("repository_insert_audit_failed: %s", exc)
         return None
 
 
@@ -242,7 +242,7 @@ def create_job(
         data = resp.data or []
         return data[0].get("id") if data else None
     except Exception as exc:
-        logger.error("repository_create_job_failed", error=str(exc))
+        logger.error("repository_create_job_failed: %s", exc)
         return None
 
 
@@ -263,7 +263,7 @@ def update_job(
         client.table("jobs").update(payload).eq("workspace_id", workspace_id).eq("id", job_id).execute()
         return True
     except Exception as exc:
-        logger.error("repository_update_job_failed", error=str(exc))
+        logger.error("repository_update_job_failed: %s", exc)
         return False
 
 
@@ -282,7 +282,7 @@ def get_job(workspace_id: str, job_id: str, supabase_jwt: Optional[str] = None) 
         )
         return (resp.data or [None])[0]
     except Exception as exc:
-        logger.error("repository_get_job_failed", error=str(exc))
+        logger.error("repository_get_job_failed: %s", exc)
         return None
 
 
@@ -309,7 +309,7 @@ def create_alert_rule(
         data = resp.data or []
         return data[0].get("id") if data else None
     except Exception as exc:
-        logger.error("repository_create_alert_rule_failed", error=str(exc))
+        logger.error("repository_create_alert_rule_failed: %s", exc)
         return None
 
 
@@ -321,7 +321,7 @@ def list_alert_rules(workspace_id: str, supabase_jwt: Optional[str] = None) -> L
         resp = client.table("alert_rules").select("*").eq("workspace_id", workspace_id).order("created_at", desc=True).execute()
         return resp.data or []
     except Exception as exc:
-        logger.error("repository_list_alert_rules_failed", error=str(exc))
+        logger.error("repository_list_alert_rules_failed: %s", exc)
         return []
 
 
@@ -344,7 +344,7 @@ def list_active_alert_rules_for_listing(
         )
         return resp.data or []
     except Exception as exc:
-        logger.error("repository_list_active_alert_rules_for_listing_failed", error=str(exc))
+        logger.error("repository_list_active_alert_rules_for_listing_failed: %s", exc)
         return []
 
 
@@ -361,7 +361,7 @@ def update_alert_rule(
         client.table("alert_rules").update(data).eq("workspace_id", workspace_id).eq("id", alert_id).execute()
         return True
     except Exception as exc:
-        logger.error("repository_update_alert_rule_failed", error=str(exc))
+        logger.error("repository_update_alert_rule_failed: %s", exc)
         return False
 
 
@@ -373,7 +373,7 @@ def delete_alert_rule(workspace_id: str, alert_id: str, supabase_jwt: Optional[s
         client.table("alert_rules").delete().eq("workspace_id", workspace_id).eq("id", alert_id).execute()
         return True
     except Exception as exc:
-        logger.error("repository_delete_alert_rule_failed", error=str(exc))
+        logger.error("repository_delete_alert_rule_failed: %s", exc)
         return False
 
 
@@ -385,7 +385,7 @@ def list_alert_events(workspace_id: str, supabase_jwt: Optional[str] = None) -> 
         resp = client.table("alert_events").select("*").eq("workspace_id", workspace_id).order("triggered_at", desc=True).execute()
         return resp.data or []
     except Exception as exc:
-        logger.error("repository_list_alert_events_failed", error=str(exc))
+        logger.error("repository_list_alert_events_failed: %s", exc)
         return []
 
 
@@ -412,8 +412,62 @@ def create_alert_event(
         data = resp.data or []
         return data[0] if data else None
     except Exception as exc:
-        logger.error("repository_create_alert_event_failed", error=str(exc))
+        logger.error("repository_create_alert_event_failed: %s", exc)
         return None
+
+
+def create_usage_log(
+    workspace_id: str,
+    feature: str,
+    user_id: Optional[str] = None,
+    trace_id: Optional[str] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    tokens_used: int = 0,
+    supabase_jwt: Optional[str] = None,
+) -> Optional[str]:
+    client = _make_client(supabase_jwt=supabase_jwt)
+    if not client:
+        return None
+    payload_metadata = metadata.copy() if isinstance(metadata, dict) else {}
+    if user_id:
+        payload_metadata["user_id"] = user_id
+    if trace_id:
+        payload_metadata["trace_id"] = trace_id
+    payload = {
+        "workspace_id": workspace_id,
+        "feature": feature,
+        "tokens_used": int(tokens_used or 0),
+        "metadata": payload_metadata,
+    }
+    try:
+        resp = client.table("usage_logs").insert(payload).execute()
+        data = resp.data or []
+        return data[0].get("id") if data else None
+    except Exception as exc:
+        logger.error("repository_create_usage_log_failed: %s", exc)
+        return None
+
+
+def count_usage_logs(
+    workspace_id: str,
+    feature: str,
+    supabase_jwt: Optional[str] = None,
+) -> int:
+    client = _make_client(supabase_jwt=supabase_jwt)
+    if not client:
+        return 0
+    try:
+        resp = (
+            client.table("usage_logs")
+            .select("id", count="exact", head=True)
+            .eq("workspace_id", workspace_id)
+            .eq("feature", feature)
+            .execute()
+        )
+        return int(resp.count or 0)
+    except Exception as exc:
+        logger.error("repository_count_usage_logs_failed: %s", exc)
+        return 0
 
 
 def create_market_research_audit(summary: Any, listings: Any) -> Dict[str, Any]:

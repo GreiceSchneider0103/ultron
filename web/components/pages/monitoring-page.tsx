@@ -6,6 +6,7 @@ import { JsonView } from '@/components/pages/json-view'
 import { Card, ErrorState } from '@/components/ui/primitives'
 import { useApiAction } from '@/hooks/use-api-action'
 import { createAlert, listAlertEvents, listAlerts } from '@/services/alerts.service'
+import { RetryButton } from '@/components/ui/retry-button'
 
 export function MonitoringPage({ workspaceId }: { workspaceId: string }) {
   const [alertName, setAlertName] = useState('Queda brusca de preco')
@@ -72,12 +73,22 @@ export function MonitoringPage({ workspaceId }: { workspaceId: string }) {
             Criar
           </button>
         </div>
-        {create.error ? <div className="mt-3"><ErrorState message={create.error} /></div> : null}
+        {create.error ? (
+          <div className="mt-3 space-y-2">
+            <ErrorState message={create.error} />
+            <RetryButton onRetry={onCreate} loading={create.loading} />
+          </div>
+        ) : null}
       </Card>
 
       <Card>
         <h2 className="text-xl font-semibold">Regras ativas</h2>
-        {rules.error ? <div className="mt-3"><ErrorState message={rules.error} onRetry={() => loadAll()} /></div> : null}
+        {rules.error ? (
+          <div className="mt-3 space-y-2">
+            <ErrorState message={rules.error} />
+            <RetryButton onRetry={loadAll} loading={rules.loading} />
+          </div>
+        ) : null}
         <div className="mt-3">
           <JsonView value={rules.data ?? { items: [] }} />
         </div>
@@ -85,7 +96,12 @@ export function MonitoringPage({ workspaceId }: { workspaceId: string }) {
 
       <Card>
         <h2 className="text-xl font-semibold">Historico de eventos</h2>
-        {events.error ? <div className="mt-3"><ErrorState message={events.error} onRetry={() => loadAll()} /></div> : null}
+        {events.error ? (
+          <div className="mt-3 space-y-2">
+            <ErrorState message={events.error} />
+            <RetryButton onRetry={loadAll} loading={events.loading} />
+          </div>
+        ) : null}
         <div className="mt-3">
           <JsonView value={events.data ?? { items: [] }} />
         </div>

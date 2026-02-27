@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     ENVIRONMENT: str = "development"
     CORS_ORIGINS: str = "http://localhost:3000"
+    MONITOR_SCHEDULER_ENABLED: bool = True
+    MONITOR_SCHEDULER_INTERVAL_MINUTES: int = 10
+    MONITOR_ALERT_DEDUPE_HOURS: int = 6
+    MONITOR_MAX_LISTINGS_PER_CYCLE: int = 100
 
     # â”€â”€ Propriedades derivadas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -97,6 +101,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
+
+    @property
+    def monitor_scheduler_should_run(self) -> bool:
+        return self.MONITOR_SCHEDULER_ENABLED and self.ENVIRONMENT in {"development", "internal"}
 
     def ai_configured(self) -> bool:
         """True se ao menos um provider de IA estÃ¡ configurado."""

@@ -17,6 +17,20 @@ pip install -r api/requirements.txt
 copy api\.env.example .env
 ```
 
+## Migrações versionadas (mínimo)
+
+Este projeto usa migrações SQL versionadas em `api/migrations/versions`.
+
+- Dev (SQLite local):
+
+```bash
+python api/scripts/apply_migrations.py
+```
+
+- Staging (Postgres/Supabase SQL editor):
+  - Aplicar os arquivos `api/migrations/versions/*.sql` em ordem (0001, 0002, ...).
+  - Registrar versão em `public.schema_migrations`.
+
 ## Auth e Workspace
 
 - Todos os endpoints em `/api/*` exigem `Authorization: Bearer <supabase_jwt>`.
@@ -48,4 +62,10 @@ Endpoints ainda nao finalizados retornam HTTP 501 no formato:
   "endpoint": "/api/ads/create",
   "message": "This endpoint is planned but not implemented yet."
 }
+```
+
+## Testes smoke (contrato e endpoints)
+
+```bash
+python -m pytest -q api/tests/test_contract_smoke.py api/tests/test_endpoints_smoke.py
 ```

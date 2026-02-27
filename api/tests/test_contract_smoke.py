@@ -35,6 +35,7 @@ def _make_listing() -> ListingNormalized:
 def test_listing_normalized_contract():
     listing = _make_listing()
     payload = listing.to_contract_payload()
+    assert payload["schema_version"] == "1.0.0"
     assert validate_against_contract(payload, "listing_normalized.schema.json")
 
 

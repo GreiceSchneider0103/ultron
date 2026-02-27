@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.src.auth import RequestContext, require_auth_context
 from api.src.db import repository
 from api.src.routers.schemas import AlertsCreateRequest, AlertsUpdateRequest
+from api.src.services.monitoring_scheduler import get_scheduler_health, run_monitor_cycle
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 monitoring_router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
@@ -52,6 +53,22 @@ async def alerts_delete(alert_id: str, ctx: RequestContext = Depends(require_aut
 @router.get("/events")
 async def alerts_events(ctx: RequestContext = Depends(require_auth_context)):
     return {"items": repository.list_alert_events(workspace_id=ctx.workspace_id, supabase_jwt=ctx.token)}
+
+
+@router.get("/health")
+async def alerts_health(ctx: RequestContext = Depends(require_auth_context)):
+    state = get_scheduler_health()
+    return {"workspace_id": ctx.workspace_id, **state}
+
+
+@router.post("/run-once")
+async def alerts_run_once(ctx: RequestContext = Depends(require_auth_context)):
+    result = await run_monitor_cycle(
+        workspace_id=ctx.workspace_id,
+        supabase_jwt=ctx.token,
+        source="manual",
+    )
+    return {"workspace_id": ctx.workspace_id, "result": result}
 
 
 @monitoring_router.post("/alerts")

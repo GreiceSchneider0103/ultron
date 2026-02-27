@@ -64,9 +64,8 @@ export default function ApiConsole({
         }
       })
 
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const normalizedPath = path.startsWith('/') ? path : `/${path}`
-      const url = `${baseUrl}${normalizedPath}${query.toString() ? `?${query.toString()}` : ''}`
+      const url = `/api/proxy${normalizedPath}${query.toString() ? `?${query.toString()}` : ''}`
 
       const response = await fetch(url, {
         method,
@@ -81,6 +80,16 @@ export default function ApiConsole({
       setStatusCode(response.status)
 
       const text = await response.text()
+      if (!response.ok) {
+        try {
+          const parsed = JSON.parse(text) as Record<string, unknown>
+          throw new Error(
+            String(parsed.message || parsed.error || `Falha no endpoint (${response.status})`)
+          )
+        } catch {
+          throw new Error(text || `Falha no endpoint (${response.status})`)
+        }
+      }
       try {
         setResult(safeStringify(JSON.parse(text)))
       } catch {

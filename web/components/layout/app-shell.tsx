@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { type ReactNode, useMemo, useState } from 'react'
 
 import { createClient } from '@/utils/supabase/client'
+import { ApiStatus } from '@/components/layout/api-status'
 
 type AppShellProps = {
   children: ReactNode
@@ -95,6 +96,7 @@ export function AppShell({ children, userEmail, workspaceName }: AppShellProps) 
             className="w-full max-w-md rounded-lg border border-border bg-slate-50 px-3 py-2 text-sm outline-none focus:border-primary"
             placeholder="Buscar anuncio, SKU, palavra-chave..."
           />
+          <ApiStatus />
           <div className="hidden rounded-lg border border-border px-3 py-1.5 text-sm text-slate-700 md:block">
             ML
           </div>

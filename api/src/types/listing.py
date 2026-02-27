@@ -3,7 +3,7 @@ Schema canônico para todos os anúncios coletados.
 Todo conector DEVE produzir um objeto ListingNormalized.
 """
 from __future__ import annotations
-from typing import Optional, List
+from typing import Optional, List, Literal
 from enum import Enum
 from datetime import datetime
 
@@ -147,6 +147,9 @@ class ListingNormalized(BaseModel):
     Formato canônico único para anúncios de qualquer marketplace.
     Produzido por cada Connector e consumido por Pipeline, Scoring e Orquestrador.
     """
+    # Contrato canônico congelado
+    schema_version: Literal["1.0.0"] = "1.0.0"
+
     # Identificação
     marketplace: Marketplace
     listing_id: str
