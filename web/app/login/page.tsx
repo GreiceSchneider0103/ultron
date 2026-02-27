@@ -4,14 +4,19 @@ import { redirect } from 'next/navigation'
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { message?: string }
+  searchParams: Promise<{ message?: string | string[] }>
 }) {
+  const resolvedSearchParams = await searchParams
+  const message = Array.isArray(resolvedSearchParams?.message)
+    ? resolvedSearchParams.message[0]
+    : resolvedSearchParams?.message
+
   const supabase = await createClient()
   const {
     data: { session },
   } = await supabase.auth.getSession()
 
-  if (session) redirect('/dashboard')
+  if (session) redirect('/home')
 
   async function signIn(formData: FormData) {
     'use server'
@@ -21,7 +26,7 @@ export default async function LoginPage({
     const supabase = await createClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) redirect('/login?message=Erro ao fazer login')
-    redirect('/dashboard')
+    redirect('/home')
   }
 
   async function signUp(formData: FormData) {
@@ -30,9 +35,12 @@ export default async function LoginPage({
     const password = String(formData.get('password') || '')
 
     const supabase = await createClient()
-    const { error } = await supabase.auth.signUp({ email, password })
+    const { data, error } = await supabase.auth.signUp({ email, password })
     if (error) redirect('/login?message=Erro ao criar conta')
-    redirect('/dashboard')
+    if (!data.session) {
+      redirect('/login?message=Conta criada. Confirme seu e-mail para entrar')
+    }
+    redirect('/home')
   }
 
   return (
@@ -40,9 +48,9 @@ export default async function LoginPage({
       <div className="w-full max-w-md space-y-6 rounded-xl bg-white p-8 shadow-md">
         <h1 className="text-center text-2xl font-bold text-gray-900">Ultron SaaS</h1>
 
-        {searchParams?.message && (
+        {message && (
           <p className="rounded-md bg-red-100 p-4 text-sm text-red-600">
-            {searchParams.message}
+            {message}
           </p>
         )}
 
