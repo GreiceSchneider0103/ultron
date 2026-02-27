@@ -1698,6 +1698,230 @@
 				"description": "Generated from cURL: curl -X GET \"https://raw.githubusercontent.com/GreiceSchneider0103/ultron/main/api/src/connectors/__init__.py\""
 			},
 			"response": []
+		},
+		{
+			"name": "_temp_repo_root",
+			"id": "7ff30c07-dc38-4e9e-8f28-3e83ca1e74c2",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_api_src",
+			"id": "4f34d410-0ed4-4c4e-ad21-de78c4d716f9",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_connectors",
+			"id": "c8fc4c94-a6ad-4b40-9c62-6ae2cded0268",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/connectors",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/connectors\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_db",
+			"id": "0eac70f6-b433-40e7-a82c-055962510106",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/db",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/db\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_functions",
+			"id": "f72844cc-17ed-4719-afac-e4a39b64203b",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/functions",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/functions\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_orchestrator",
+			"id": "09346acc-fbf1-4cba-9dfc-6d9022fe920c",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/orchestrator",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/orchestrator\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_pipeline",
+			"id": "bccfb8fa-4dea-45f4-bcb3-0bae818377c9",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/pipeline",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/pipeline\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_scoring",
+			"id": "c0439bc4-e2f2-4139-a13a-bc6874b5c504",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/scoring",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/scoring\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_types",
+			"id": "950752dc-2743-4708-af3b-de86f17b1306",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/types",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/types\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_utils",
+			"id": "3c4de2f6-17a3-46f9-84a3-c8c4e194bf27",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/utils",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/utils\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_contracts",
+			"id": "d4cd1c92-6833-4e5e-8128-133557734347",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/contracts",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/contracts\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_reports",
+			"id": "57cf3162-f94e-4b1f-8986-fbc4476a155f",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/reports",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/reports\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_routers",
+			"id": "16dae273-c5de-41be-9cf2-0dacd8af5431",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/routers",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/routers\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_services",
+			"id": "7a7c6efd-578f-481a-8675-475dfc0f368f",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/services",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/services\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_strategy",
+			"id": "b19895f8-a027-4c41-8509-98ffefe50ebf",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/strategy",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/strategy\""
+			},
+			"response": []
+		},
+		{
+			"name": "_temp_experiments",
+			"id": "4068629f-9a84-40c9-b795-7fc0a94ab441",
+			"protocolProfileBehavior": {
+				"disableBodyPruning": true
+			},
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": "https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/experiments",
+				"description": "Generated from cURL: curl -s \"https://api.github.com/repos/GreiceSchneider0103/ultron/contents/api/src/experiments\""
+			},
+			"response": []
 		}
 	]
 }
