@@ -17,7 +17,7 @@ export function useApiAction<T>() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Erro desconhecido'
       setError(message)
-      throw err
+      return null
     } finally {
       setLoading(false)
     }

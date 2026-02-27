@@ -23,7 +23,7 @@ export function ReportsPage({ workspaceId }: { workspaceId: string }) {
       findings: { source: 'ui-report-generator' },
     }
     const result = await create.run(() => generateReport(workspaceId, payload))
-    setReportId(result.report_id)
+    if (result?.report_id) setReportId(result.report_id)
   }
 
   async function onStatus() {
@@ -34,6 +34,18 @@ export function ReportsPage({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="space-y-5">
       <h1 className="text-3xl font-semibold">Relatorios</h1>
+      <p className="text-sm text-slate-500">Biblioteca de analises geradas</p>
+      <Card>
+        <h2 className="text-xl font-semibold">Modelos de relatorio</h2>
+        <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
+          {['Auditoria completa', 'Pesquisa de mercado', 'Plano 10 acoes', 'Relatorio SEO'].map((item) => (
+            <div key={item} className="rounded-lg border border-border bg-slate-50 p-3 text-sm text-slate-700">
+              <p className="font-semibold">{item}</p>
+              <p className="mt-1 text-xs text-slate-500">Template pronto para exportacao</p>
+            </div>
+          ))}
+        </div>
+      </Card>
       <Card>
         <h2 className="text-xl font-semibold">Gerar relatorio estrategico</h2>
         <div className="mt-3 flex flex-wrap gap-2">

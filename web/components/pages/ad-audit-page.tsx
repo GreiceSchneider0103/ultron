@@ -43,6 +43,7 @@ export function AdAuditPage({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="space-y-5">
       <h1 className="text-3xl font-semibold">Auditoria de Anuncio</h1>
+      <p className="text-sm text-slate-500">Compare seu anuncio com concorrentes e gere plano de acao.</p>
 
       <Card>
         <form onSubmit={onLoadMyListing} className="grid gap-3 md:grid-cols-4">
@@ -81,6 +82,20 @@ export function AdAuditPage({ workspaceId }: { workspaceId: string }) {
         </div>
       </Card>
 
+      <section className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        {[
+          ['SEO', '62'],
+          ['Conversao', '48'],
+          ['Competitividade', '71'],
+          ['Diferencial', '55'],
+        ].map(([label, score]) => (
+          <Card key={label} className="py-3">
+            <p className="text-sm text-slate-600">{label}</p>
+            <p className="mt-2 text-2xl font-semibold">{score}</p>
+          </Card>
+        ))}
+      </section>
+
       {myListingAction.error ? <ErrorState message={myListingAction.error} /> : null}
       {competitorsAction.error ? <ErrorState message={competitorsAction.error} /> : null}
       {auditAction.error ? <ErrorState message={auditAction.error} /> : null}
@@ -107,6 +122,15 @@ export function AdAuditPage({ workspaceId }: { workspaceId: string }) {
       {auditAction.data ? (
         <Card>
           <h3 className="text-lg font-semibold">Auditoria</h3>
+          <div className="mt-3 rounded-lg border border-border bg-slate-50 p-3">
+            <p className="text-sm font-semibold">Checklist de auditoria</p>
+            <ul className="mt-2 space-y-1 text-sm text-slate-700">
+              <li>Titulo com keyword principal</li>
+              <li>Titulo dentro do limite de caracteres</li>
+              <li>Minimo de fotos atendido</li>
+              <li>Atributos obrigatorios preenchidos</li>
+            </ul>
+          </div>
           <div className="mt-3">
             <JsonView value={auditAction.data} />
           </div>

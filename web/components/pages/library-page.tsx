@@ -36,41 +36,63 @@ export function LibraryPage({ workspaceId }: { workspaceId: string }) {
   return (
     <div className="space-y-5">
       <h1 className="text-3xl font-semibold">Biblioteca (Docs & Imagens)</h1>
+      <p className="text-sm text-slate-500">Documentos, PDFs e imagens por projeto</p>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[280px_1fr]">
+        <Card>
+          <h2 className="text-xl font-semibold">Projetos</h2>
+          <div className="mt-3 space-y-2 text-sm">
+            {[
+              'Tenis Nike Air Max 270',
+              'Fone Bluetooth Sony WH5',
+              'Camera IP 4K',
+              'Mochila Esportiva 40L',
+            ].map((p, i) => (
+              <button key={p} className={`w-full rounded-md border px-3 py-2 text-left ${i === 0 ? 'border-blue-200 bg-blue-50' : 'border-border bg-white'}`}>{p}</button>
+            ))}
+          </div>
+        </Card>
+        <div className="space-y-4">
+          <Card>
+            <h2 className="text-xl font-semibold">Upload area</h2>
+            <p className="mt-2 text-sm text-slate-600">Arraste PDFs, imagens ou ZIP aqui, ou clique para selecionar.</p>
+            <input type="file" accept=".pdf,.zip,image/*" className="mt-3" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          </Card>
 
-      <Card>
-        <h2 className="text-xl font-semibold">Documentos</h2>
-        <input type="file" accept=".pdf" className="mt-3" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={onUpload} className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white">
-            Upload PDF
-          </button>
-          <input
-            value={documentId}
-            onChange={(e) => setDocumentId(e.target.value)}
-            className="rounded-md border border-border px-3 py-2 text-sm"
-            placeholder="document_id"
-          />
-          <button type="button" onClick={onExtract} className="rounded-md border border-border px-3 py-2 text-sm">
-            Extrair texto
-          </button>
+          <Card>
+            <h2 className="text-xl font-semibold">Documentos PDF</h2>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={onUpload} className="rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white">
+                Upload PDF
+              </button>
+              <input
+                value={documentId}
+                onChange={(e) => setDocumentId(e.target.value)}
+                className="rounded-md border border-border px-3 py-2 text-sm"
+                placeholder="document_id"
+              />
+              <button type="button" onClick={onExtract} className="rounded-md border border-border px-3 py-2 text-sm">
+                Extrair ficha
+              </button>
+            </div>
+            {upload.error ? <div className="mt-3"><ErrorState message={upload.error} /></div> : null}
+            {extract.error ? <div className="mt-3"><ErrorState message={extract.error} /></div> : null}
+          </Card>
+
+          <Card>
+            <h2 className="text-xl font-semibold">Galeria de imagens</h2>
+            <input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              className="mt-3 w-full rounded-md border border-border px-3 py-2 text-sm"
+              placeholder="URL da imagem"
+            />
+            <button type="button" onClick={onImageAnalyze} className="mt-3 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white">
+              Analisar imagem
+            </button>
+            {image.error ? <div className="mt-3"><ErrorState message={image.error} /></div> : null}
+          </Card>
         </div>
-        {upload.error ? <div className="mt-3"><ErrorState message={upload.error} /></div> : null}
-        {extract.error ? <div className="mt-3"><ErrorState message={extract.error} /></div> : null}
-      </Card>
-
-      <Card>
-        <h2 className="text-xl font-semibold">Imagens</h2>
-        <input
-          value={imageUrl}
-          onChange={(e) => setImageUrl(e.target.value)}
-          className="mt-3 w-full rounded-md border border-border px-3 py-2 text-sm"
-          placeholder="URL da imagem"
-        />
-        <button type="button" onClick={onImageAnalyze} className="mt-3 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white">
-          Analisar imagem
-        </button>
-        {image.error ? <div className="mt-3"><ErrorState message={image.error} /></div> : null}
-      </Card>
+      </div>
 
       {upload.data ? <Card><h3 className="text-lg font-semibold">Upload</h3><div className="mt-3"><JsonView value={upload.data} /></div></Card> : null}
       {extract.data ? <Card><h3 className="text-lg font-semibold">Extract</h3><div className="mt-3"><JsonView value={extract.data} /></div></Card> : null}

@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useState } from 'react'
+import { FormEvent, useMemo, useState } from 'react'
 
 import { Card, EmptyState, ErrorState } from '@/components/ui/primitives'
 import { useApiAction } from '@/hooks/use-api-action'
@@ -9,7 +9,17 @@ import { extractKeywordsFromTopListings } from '@/services/seo.service'
 import { JsonView } from '@/components/pages/json-view'
 
 export function MarketResearchPage({ workspaceId }: { workspaceId: string }) {
-  const [query, setQuery] = useState('tenis corrida')
+  const [mode, setMode] = useState<'link' | 'keyword' | 'manual'>('keyword')
+  const [query, setQuery] = useState('tenis running masculino')
+  const [linkInput, setLinkInput] = useState('')
+  const [manualTitle, setManualTitle] = useState('')
+  const [condition, setCondition] = useState('novo')
+  const [category, setCategory] = useState('Esportes e Fitness')
+  const [region, setRegion] = useState('nacional')
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [freteEmbutido, setFreteEmbutido] = useState(true)
+  const [apenasFull, setApenasFull] = useState(false)
   const [marketplace, setMarketplace] = useState('mercadolivre')
   const [selectedId, setSelectedId] = useState('')
 
@@ -18,10 +28,25 @@ export function MarketResearchPage({ workspaceId }: { workspaceId: string }) {
   const keywordsAction = useApiAction<Record<string, unknown>>()
   const analyzeAction = useApiAction<Record<string, unknown>>()
 
+  const effectiveQuery = useMemo(() => {
+    if (mode === 'link') return linkInput.trim()
+    if (mode === 'manual') return manualTitle.trim()
+    return query.trim()
+  }, [linkInput, manualTitle, mode, query])
+
   async function onSearch(e: FormEvent) {
     e.preventDefault()
+    if (!effectiveQuery) {
+      searchAction.setError('Informe um link, keyword ou dados do produto.')
+      return
+    }
     await searchAction.run(async () => {
-      const data = await searchMarketplaceListings(workspaceId, { marketplace, query, limit: 20, offset: 0 })
+      const data = await searchMarketplaceListings(workspaceId, {
+        marketplace,
+        query: effectiveQuery,
+        limit: 20,
+        offset: 0,
+      })
       if (data.items?.[0]?.id) setSelectedId(String(data.items[0].id))
       return { count: data.count, items: data.items as Array<Record<string, unknown>> }
     })
@@ -36,41 +61,180 @@ export function MarketResearchPage({ workspaceId }: { workspaceId: string }) {
     await keywordsAction.run(() =>
       extractKeywordsFromTopListings(workspaceId, {
         marketplace,
-        product_title: query,
+        product_title: effectiveQuery,
         limit: 15,
       })
     )
   }
 
   async function onAnalyze() {
-    await analyzeAction.run(() => analyzeMarket(workspaceId, { keyword: query, marketplace, limit: 20 }))
+    await analyzeAction.run(() => analyzeMarket(workspaceId, { keyword: effectiveQuery, marketplace, limit: 20 }))
   }
 
   return (
     <div className="space-y-5">
       <h1 className="text-3xl font-semibold">Pesquisa de Mercado</h1>
+      <p className="text-sm text-slate-500">Analise a concorrencia e descubra oportunidades</p>
 
-      <Card>
-        <form onSubmit={onSearch} className="grid gap-3 md:grid-cols-[160px_1fr_auto]">
-          <select
-            value={marketplace}
-            onChange={(e) => setMarketplace(e.target.value)}
-            className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
-          >
-            <option value="mercadolivre">Mercado Livre</option>
-            <option value="magalu">Magalu</option>
-          </select>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
-            placeholder="Cole o link ou descreva o produto"
-          />
-          <button className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground" disabled={searchAction.loading}>
-            {searchAction.loading ? 'Pesquisando...' : 'Pesquisar'}
-          </button>
-        </form>
-      </Card>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[2fr_1fr]">
+        <Card>
+          <form onSubmit={onSearch} className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 rounded-lg bg-slate-100 p-1 sm:grid-cols-3">
+              {[
+                ['link', 'Por link'],
+                ['keyword', 'Por keyword'],
+                ['manual', 'Dados manuais'],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value as 'link' | 'keyword' | 'manual')}
+                  className={`rounded-md px-3 py-2 text-sm ${
+                    mode === value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="text-sm text-slate-600">Marketplace</label>
+                <select
+                  value={marketplace}
+                  onChange={(e) => setMarketplace(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                >
+                  <option value="mercadolivre">Mercado Livre</option>
+                  <option value="magalu">Magalu</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm text-slate-600">Condicao</label>
+                <select
+                  value={condition}
+                  onChange={(e) => setCondition(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                >
+                  <option value="novo">Novo</option>
+                  <option value="usado">Usado</option>
+                </select>
+              </div>
+            </div>
+
+            {mode === 'link' ? (
+              <div>
+                <label className="text-sm text-slate-600">Link do anuncio</label>
+                <input
+                  value={linkInput}
+                  onChange={(e) => setLinkInput(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                  placeholder="https://..."
+                />
+              </div>
+            ) : null}
+
+            {mode === 'keyword' ? (
+              <div>
+                <label className="text-sm text-slate-600">Palavra-chave</label>
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                  placeholder="tenis running masculino"
+                />
+              </div>
+            ) : null}
+
+            {mode === 'manual' ? (
+              <div>
+                <label className="text-sm text-slate-600">Dados do produto</label>
+                <input
+                  value={manualTitle}
+                  onChange={(e) => setManualTitle(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                  placeholder="Nome/titulo do produto"
+                />
+              </div>
+            ) : null}
+
+            <div>
+              <label className="text-sm text-slate-600">Categoria</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-border bg-white px-3 py-2 text-sm"
+              >
+                <option>Esportes e Fitness</option>
+                <option>Eletronicos</option>
+                <option>Casa e Decoracao</option>
+                <option>Moda</option>
+              </select>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-[1fr_1fr_1fr]">
+              <input
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                placeholder="Preco min"
+              />
+              <input
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+                placeholder="Preco max"
+              />
+              <select
+                value={region}
+                onChange={(e) => setRegion(e.target.value)}
+                className="rounded-lg border border-border bg-white px-3 py-2 text-sm"
+              >
+                <option value="nacional">Nacional</option>
+                <option value="sudeste">Sudeste</option>
+                <option value="sul">Sul</option>
+                <option value="nordeste">Nordeste</option>
+              </select>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-sm text-slate-700">
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={freteEmbutido} onChange={(e) => setFreteEmbutido(e.target.checked)} />
+                Frete embutido
+              </label>
+              <label className="inline-flex items-center gap-2">
+                <input type="checkbox" checked={apenasFull} onChange={(e) => setApenasFull(e.target.checked)} />
+                Apenas Full
+              </label>
+            </div>
+
+            <button
+              className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
+              disabled={searchAction.loading}
+            >
+              {searchAction.loading ? 'Rodando analise...' : 'Rodar analise'}
+            </button>
+          </form>
+        </Card>
+
+        <Card>
+          <h3 className="text-xl font-semibold">O que sera gerado</h3>
+          <ul className="mt-3 space-y-2 text-sm text-slate-600">
+            <li>Faixa de preco por seller</li>
+            <li>Top 10 anuncios ranqueados</li>
+            <li>Mapa de keywords</li>
+            <li>Gaps de mercado</li>
+            <li>Estruturas de titulo vencedoras</li>
+            <li>Mapa de atributos</li>
+            <li>Analise de frete</li>
+            <li>Plano de acao SEO</li>
+          </ul>
+          <div className="mt-4 rounded-lg bg-blue-50 p-3 text-xs text-blue-800">
+            Tempo estimado: 45-90 segundos dependendo da complexidade.
+          </div>
+        </Card>
+      </div>
 
       {searchAction.error ? <ErrorState message={searchAction.error} /> : null}
 

@@ -13,6 +13,14 @@ type ApiRequestParams = {
   timeoutMs?: number
 }
 
+async function getAccessToken() {
+  const supabase = createClient()
+  const {
+    data: { session },
+  } = await supabase.auth.getSession()
+  return session?.access_token ?? null
+}
+
 function toQueryString(query?: ApiRequestParams['query']) {
   if (!query) return ''
   const qs = new URLSearchParams()
@@ -32,17 +40,13 @@ export async function apiRequest<T>({
   workspaceId,
   timeoutMs = 15000,
 }: ApiRequestParams): Promise<T> {
-  const supabase = createClient()
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-
-  if (!session?.access_token) {
+  const token = await getAccessToken()
+  if (!token) {
     const err: ApiError = { message: 'Sessao expirada. Faca login novamente.' }
     throw err
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const baseUrl = '/api/proxy'
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
@@ -51,7 +55,7 @@ export async function apiRequest<T>({
       method,
       signal: controller.signal,
       headers: {
-        Authorization: `Bearer ${session.access_token}`,
+        Authorization: `Bearer ${token}`,
         ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
         ...(method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
       },
@@ -78,6 +82,63 @@ export async function apiRequest<T>({
     }
 
     return parsed as T
+  } catch (err) {
+    if (typeof err === 'object' && err !== null && 'message' in err) {
+      throw err as ApiError
+    }
+    const message =
+      err instanceof DOMException && err.name === 'AbortError'
+        ? 'Tempo limite excedido ao chamar API.'
+        : err instanceof Error
+          ? `Falha de conexao com a API: ${err.message}`
+          : 'Falha de conexao com a API.'
+    const wrapped: ApiError = { message }
+    throw wrapped
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function apiRequestMultipart<T>({
+  path,
+  formData,
+  workspaceId,
+  timeoutMs = 20000,
+}: {
+  path: string
+  formData: FormData
+  workspaceId?: string
+  timeoutMs?: number
+}): Promise<T> {
+  const token = await getAccessToken()
+  if (!token) {
+    throw { message: 'Sessao expirada. Faca login novamente.' } as ApiError
+  }
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetch(`/api/proxy${path}`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(workspaceId ? { 'X-Workspace-Id': workspaceId } : {}),
+      },
+      body: formData,
+    })
+    const text = await response.text()
+    const parsed = text ? JSON.parse(text) : {}
+    if (!response.ok) {
+      throw { message: (parsed as { detail?: string })?.detail || `Falha na API (${response.status})` } as ApiError
+    }
+    return parsed as T
+  } catch (err) {
+    if (typeof err === 'object' && err !== null && 'message' in err) {
+      throw err as ApiError
+    }
+    const message = err instanceof Error ? err.message : 'Falha de conexao com a API.'
+    throw { message } as ApiError
   } finally {
     clearTimeout(timer)
   }

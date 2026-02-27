@@ -45,6 +45,41 @@ export function RulesPage() {
   return (
     <div className="space-y-5">
       <h1 className="text-3xl font-semibold">Regras por Marketplace</h1>
+      <p className="text-sm text-slate-500">Configuracao e validacao em tempo real</p>
+      <Card>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="flex gap-2">
+            <button className="rounded-md border border-yellow-300 bg-yellow-100 px-3 py-2 text-sm">Mercado Livre</button>
+            <button className="rounded-md border border-border bg-white px-3 py-2 text-sm">Magazine Luiza</button>
+          </div>
+          <select className="rounded-md border border-border px-3 py-2 text-sm">
+            <option>Tenis Esportivos</option>
+            <option>Eletronicos</option>
+            <option>Casa e Decoracao</option>
+          </select>
+        </div>
+      </Card>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Card>
+          <h2 className="text-xl font-semibold">Regras - Mercado Livre</h2>
+          <div className="mt-3 space-y-2 text-sm text-slate-700">
+            <p>Limite de titulo: 60 caracteres</p>
+            <p>Palavras proibidas: gratis, promocao, desconto, barato</p>
+            <p>Atributos obrigatorios: marca, modelo, cor, material, tamanho</p>
+            <p>Fotos minimas: 6</p>
+          </div>
+        </Card>
+        <Card>
+          <h2 className="text-xl font-semibold">Validacao em tempo real</h2>
+          <div className="mt-3 space-y-2 text-sm">
+            <div className="rounded-md bg-red-50 p-2 text-red-700">Comprimento do titulo: Critico</div>
+            <div className="rounded-md bg-emerald-50 p-2 text-emerald-700">Palavras proibidas: OK</div>
+            <div className="rounded-md bg-amber-50 p-2 text-amber-700">Atributos obrigatorios: Atencao</div>
+            <div className="rounded-md bg-amber-50 p-2 text-amber-700">Quantidade de fotos: Atencao</div>
+            <div className="rounded-md bg-emerald-50 p-2 text-emerald-700">Descricao: OK</div>
+          </div>
+        </Card>
+      </div>
       {error ? <ErrorState message={error} onRetry={() => load()} /> : null}
       {loading ? <Card><p className="text-sm text-muted-foreground">Carregando regras...</p></Card> : null}
       {!loading && !error && items.length === 0 ? (
